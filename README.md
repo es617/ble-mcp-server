@@ -174,8 +174,10 @@ Returns `{ "ok": true, "devices": [...], "active": false }`.
 Connect to a device by address.
 
 ```json
-{ "address": "AA:BB:CC:DD:EE:FF", "timeout_s": 10 }
+{ "address": "AA:BB:CC:DD:EE:FF", "timeout_s": 10, "pair": true }
 ```
+
+Set `pair` to `true` to bond during connection. Pairing works on Linux (BlueZ) and Windows (WinRT). On macOS, the OS pairs automatically when you access a secured characteristic, so this flag is not needed.
 
 Returns `{ "ok": true, "connection_id": "abc123", "address": "..." }`.
 
@@ -194,24 +196,6 @@ Check whether a connection is still alive. If the device disconnected unexpected
 ```
 
 Returns `{ "ok": true, "connected": true, "address": "AA:BB:CC:DD:EE:FF" }` or `{ "ok": true, "connected": false, "address": "...", "disconnect_ts": 1700000000.0 }`.
-
-### ble.pair
-
-Pair (bond) with a connected device. Required by some devices before they allow access to secured characteristics.
-
-```json
-{ "connection_id": "abc123" }
-```
-
-Returns `{ "ok": true, "paired": true }` or an error if the platform doesn't support pairing.
-
-### ble.unpair
-
-Remove pairing (bond) with a connected device.
-
-```json
-{ "connection_id": "abc123" }
-```
 
 ### ble.discover
 

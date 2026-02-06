@@ -11,7 +11,6 @@ import signal
 import sys
 from typing import Any
 
-from bleak import BleakClient
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
@@ -153,6 +152,11 @@ TOOLS: list[Tool] = [
                     "description": "Connection timeout in seconds (default 10).",
                     "default": 10,
                 },
+                "pair": {
+                    "type": "boolean",
+                    "description": "Pair (bond) during connect. Works on Linux and Windows, not macOS.",
+                    "default": False,
+                },
             },
             "required": ["address"],
         },
@@ -175,31 +179,6 @@ TOOLS: list[Tool] = [
             "and disconnect_ts if the device disconnected unexpectedly. "
             "Use this to verify a connection before a sequence of operations."
         ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "connection_id": {"type": "string"},
-            },
-            "required": ["connection_id"],
-        },
-    ),
-    Tool(
-        name="ble.pair",
-        description=(
-            "Pair (bond) with a connected device. Required by some devices before they allow "
-            "reading/writing secured characteristics. Not all platforms support this."
-        ),
-        inputSchema={
-            "type": "object",
-            "properties": {
-                "connection_id": {"type": "string"},
-            },
-            "required": ["connection_id"],
-        },
-    ),
-    Tool(
-        name="ble.unpair",
-        description="Remove pairing (bond) with a connected device. Not all platforms support this.",
         inputSchema={
             "type": "object",
             "properties": {
@@ -443,7 +422,10 @@ async def handle_scan_stop(state: BleState, args: dict[str, Any]) -> dict[str, A
 async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     address = args["address"]
     timeout = min(float(args.get("timeout_s", 10)), 60)
-    client = BleakClient(address, timeout=timeout)
+    pair = bool(args.get("pair", False))
+
+    entry = state.create_client(address, timeout, pair=pair)
+    client = entry.client
 
     async def _do_connect():
         await client.connect()
@@ -452,7 +434,6 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
     try:
         await asyncio.wait_for(_retry(_do_connect), timeout=timeout + 5)
     except asyncio.TimeoutError:
-        # Best-effort cleanup of half-open connection
         try:
             await client.disconnect()
         except Exception:
@@ -462,7 +443,8 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
     if not client.is_connected:
         return _err("connect_failed", f"Failed to connect to {address}")
 
-    entry = await state.add_connection(address, client)
+    # Only register in state after a successful connect
+    state.register_connection(entry)
     logger.info("Connected to %s as %s", address, entry.connection_id)
     return _ok(connection_id=entry.connection_id, address=address)
 
@@ -484,26 +466,6 @@ async def handle_connection_status(state: BleState, args: dict[str, Any]) -> dic
     return _ok(**result)
 
 
-async def handle_pair(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
-    cid = args["connection_id"]
-    entry = state.require_connected(cid)
-    try:
-        paired = await entry.client.pair()
-    except NotImplementedError:
-        return _err("not_supported", "Pairing is not supported on this platform/backend.")
-    return _ok(paired=paired)
-
-
-async def handle_unpair(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
-    cid = args["connection_id"]
-    entry = state.require_connected(cid)
-    try:
-        result = await entry.client.unpair()
-    except NotImplementedError:
-        return _err("not_supported", "Unpairing is not supported on this platform/backend.")
-    return _ok(unpaired=result)
-
-
 async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     entry = state.require_connected(cid)
@@ -511,7 +473,7 @@ async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, An
     if entry.discovered_services is not None:
         return _ok(services=entry.discovered_services)
 
-    services = await entry.client.get_services()
+    services = entry.client.services
     services_snapshot: list[dict[str, Any]] = []
     for svc in services:
         chars = []
@@ -729,8 +691,6 @@ _HANDLERS: dict[str, Any] = {
     "ble.connect": handle_connect,
     "ble.disconnect": handle_disconnect,
     "ble.connection_status": handle_connection_status,
-    "ble.pair": handle_pair,
-    "ble.unpair": handle_unpair,
     "ble.discover": handle_discover,
     "ble.mtu": handle_mtu,
     "ble.read": handle_read,

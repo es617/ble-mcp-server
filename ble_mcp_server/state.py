@@ -144,23 +144,41 @@ class BleState:
 
     # -- lifecycle -----------------------------------------------------------
 
-    async def add_connection(self, address: str, client: BleakClient) -> ConnectionEntry:
+    def create_client(self, address: str, timeout: float, *, pair: bool = False) -> ConnectionEntry:
+        """Create a BleakClient with disconnect tracking.
+
+        The entry is **not** connected or registered in state yet.
+        After a successful ``entry.client.connect()``, call
+        :meth:`register_connection` to add it to state.
+        """
         cid = self.new_connection_id()
-        entry = ConnectionEntry(connection_id=cid, address=address, client=client)
-        self.connections[cid] = entry
+
+        entry: ConnectionEntry | None = None
 
         def _on_disconnect(_client: BleakClient) -> None:
-            if not entry.disconnected:
+            nonlocal entry
+            if entry is not None and not entry.disconnected:
                 entry.disconnected = True
                 entry.disconnect_ts = time.time()
                 logger.warning("Device %s (%s) disconnected unexpectedly", address, cid)
-                # Mark all subscriptions as inactive
                 for sub in entry.subscriptions.values():
                     sub.active = False
                     sub._stop_event.set()
 
-        client.set_disconnected_callback(_on_disconnect)
+        kwargs: dict[str, Any] = {
+            "timeout": timeout,
+            "disconnected_callback": _on_disconnect,
+        }
+        if pair:
+            kwargs["pair"] = True
+
+        client = BleakClient(address, **kwargs)
+        entry = ConnectionEntry(connection_id=cid, address=address, client=client)
         return entry
+
+    def register_connection(self, entry: ConnectionEntry) -> None:
+        """Add a successfully-connected entry to state."""
+        self.connections[entry.connection_id] = entry
 
     async def remove_connection(self, connection_id: str) -> None:
         entry = self.get_connection(connection_id)
@@ -200,15 +218,13 @@ class BleState:
         if service_uuid:
             scanner_kwargs["service_uuids"] = [normalize_uuid(service_uuid)]
 
-        scanner = BleakScanner(**scanner_kwargs)
-        entry = ScanEntry(
-            scan_id=sid,
-            scanner=scanner,
-            name_filter=name_filter,
-            service_uuid=service_uuid,
-        )
+        # Entry must exist before the callback fires, but the callback
+        # references the entry.  We use a nonlocal to break the cycle.
+        entry: ScanEntry | None = None
 
         def _detection_callback(device: BLEDevice, adv: AdvertisementData) -> None:
+            if entry is None:
+                return
             name = device.name or ""
             if name_filter and name_filter.lower() not in name.lower():
                 return
@@ -231,7 +247,16 @@ class BleState:
                 }
             entry.devices[device.address] = info
 
-        scanner.register_detection_callback(_detection_callback)
+        scanner = BleakScanner(
+            detection_callback=_detection_callback,
+            **scanner_kwargs,
+        )
+        entry = ScanEntry(
+            scan_id=sid,
+            scanner=scanner,
+            name_filter=name_filter,
+            service_uuid=service_uuid,
+        )
         await scanner.start()
         entry.active = True
         self.scans[sid] = entry
