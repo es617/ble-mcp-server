@@ -77,7 +77,7 @@ class ScanEntry:
     scan_id: str
     scanner: BleakScanner
     devices: dict[str, dict[str, Any]] = field(default_factory=dict)  # address -> info
-    name_prefix: str | None = None
+    name_filter: str | None = None
     service_uuid: str | None = None
     active: bool = True
     _timeout_task: asyncio.Task[None] | None = field(default=None, repr=False)
@@ -92,6 +92,8 @@ class ConnectionEntry:
     client: BleakClient
     subscriptions: dict[str, Subscription] = field(default_factory=dict)
     discovered_services: list[dict[str, Any]] | None = None
+    disconnected: bool = False
+    disconnect_ts: float | None = None
 
 
 class BleState:
@@ -128,12 +130,36 @@ class BleState:
         except KeyError:
             raise KeyError(f"Unknown connection_id: {connection_id}")
 
+    def require_connected(self, connection_id: str) -> ConnectionEntry:
+        """Get a connection and verify it's still alive. Raises ``ConnectionError``."""
+        entry = self.get_connection(connection_id)
+        if entry.disconnected or not entry.client.is_connected:
+            if not entry.disconnected:
+                entry.disconnected = True
+                entry.disconnect_ts = time.time()
+            raise ConnectionError(
+                f"Device {entry.address} ({connection_id}) is disconnected"
+            )
+        return entry
+
     # -- lifecycle -----------------------------------------------------------
 
     async def add_connection(self, address: str, client: BleakClient) -> ConnectionEntry:
         cid = self.new_connection_id()
         entry = ConnectionEntry(connection_id=cid, address=address, client=client)
         self.connections[cid] = entry
+
+        def _on_disconnect(_client: BleakClient) -> None:
+            if not entry.disconnected:
+                entry.disconnected = True
+                entry.disconnect_ts = time.time()
+                logger.warning("Device %s (%s) disconnected unexpectedly", address, cid)
+                # Mark all subscriptions as inactive
+                for sub in entry.subscriptions.values():
+                    sub.active = False
+                    sub._stop_event.set()
+
+        client.set_disconnected_callback(_on_disconnect)
         return entry
 
     async def remove_connection(self, connection_id: str) -> None:
@@ -165,7 +191,7 @@ class BleState:
     async def start_scan(
         self,
         timeout_s: float,
-        name_prefix: str | None = None,
+        name_filter: str | None = None,
         service_uuid: str | None = None,
     ) -> ScanEntry:
         sid = self.new_scan_id()
@@ -178,17 +204,31 @@ class BleState:
         entry = ScanEntry(
             scan_id=sid,
             scanner=scanner,
-            name_prefix=name_prefix,
+            name_filter=name_filter,
             service_uuid=service_uuid,
         )
 
         def _detection_callback(device: BLEDevice, adv: AdvertisementData) -> None:
             name = device.name or ""
-            if name_prefix and not name.lower().startswith(name_prefix.lower()):
+            if name_filter and name_filter.lower() not in name.lower():
                 return
             info: dict[str, Any] = {"name": name, "address": device.address}
             if adv.rssi is not None:
                 info["rssi"] = adv.rssi
+            if adv.tx_power is not None:
+                info["tx_power"] = adv.tx_power
+            if adv.service_uuids:
+                info["service_uuids"] = list(adv.service_uuids)
+            if adv.manufacturer_data:
+                info["manufacturer_data"] = {
+                    str(company_id): bytes(data).hex()
+                    for company_id, data in adv.manufacturer_data.items()
+                }
+            if adv.service_data:
+                info["service_data"] = {
+                    uuid: bytes(data).hex()
+                    for uuid, data in adv.service_data.items()
+                }
             entry.devices[device.address] = info
 
         scanner.register_detection_callback(_detection_callback)

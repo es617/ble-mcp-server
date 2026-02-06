@@ -97,9 +97,9 @@ TOOLS: list[Tool] = [
                     "description": "Max scan duration in seconds (default 10, max 60). Scan auto-stops after this.",
                     "default": 10,
                 },
-                "name_prefix": {
+                "name_filter": {
                     "type": "string",
-                    "description": "Only collect devices whose name starts with this prefix (case-insensitive).",
+                    "description": "Only collect devices whose name contains this string (case-insensitive).",
                 },
                 "service_uuid": {
                     "type": "string",
@@ -169,10 +169,65 @@ TOOLS: list[Tool] = [
         },
     ),
     Tool(
+        name="ble.connection_status",
+        description=(
+            "Check whether a connection is still alive. Returns connected (bool), address, "
+            "and disconnect_ts if the device disconnected unexpectedly. "
+            "Use this to verify a connection before a sequence of operations."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "string"},
+            },
+            "required": ["connection_id"],
+        },
+    ),
+    Tool(
+        name="ble.pair",
+        description=(
+            "Pair (bond) with a connected device. Required by some devices before they allow "
+            "reading/writing secured characteristics. Not all platforms support this."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "string"},
+            },
+            "required": ["connection_id"],
+        },
+    ),
+    Tool(
+        name="ble.unpair",
+        description="Remove pairing (bond) with a connected device. Not all platforms support this.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "string"},
+            },
+            "required": ["connection_id"],
+        },
+    ),
+    Tool(
         name="ble.discover",
         description=(
             "Discover services and characteristics on a connected device. "
             "Results are cached per connection."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "string"},
+            },
+            "required": ["connection_id"],
+        },
+    ),
+    Tool(
+        name="ble.mtu",
+        description=(
+            "Return the negotiated MTU (Maximum Transmission Unit) for a connection. "
+            "The effective max write payload per packet is mtu - 3 bytes (ATT header). "
+            "Useful for determining chunk sizes for large writes."
         ),
         inputSchema={
             "type": "object",
@@ -218,6 +273,44 @@ TOOLS: list[Tool] = [
                 },
             },
             "required": ["connection_id", "char_uuid"],
+        },
+    ),
+    Tool(
+        name="ble.read_descriptor",
+        description=(
+            "Read a GATT descriptor by handle. Use ble.discover to find descriptor handles. "
+            "Descriptors provide metadata about characteristics (e.g. CCCD, user description)."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "string"},
+                "handle": {
+                    "type": "integer",
+                    "description": "The descriptor handle (integer) from ble.discover.",
+                },
+            },
+            "required": ["connection_id", "handle"],
+        },
+    ),
+    Tool(
+        name="ble.write_descriptor",
+        description=(
+            "Write to a GATT descriptor by handle. Requires BLE_MCP_ALLOW_WRITES=true. "
+            "Rarely needed directly — bleak handles CCCD for notify/indicate automatically."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "connection_id": {"type": "string"},
+                "handle": {
+                    "type": "integer",
+                    "description": "The descriptor handle (integer).",
+                },
+                "value_b64": {"type": "string", "description": "Base64-encoded value."},
+                "value_hex": {"type": "string", "description": "Hex-encoded value."},
+            },
+            "required": ["connection_id", "handle"],
         },
     ),
     Tool(
@@ -327,10 +420,10 @@ TOOLS: list[Tool] = [
 
 async def handle_scan_start(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     timeout = min(float(args.get("timeout_s", 10)), 60)
-    name_prefix: str | None = args.get("name_prefix")
+    name_filter: str | None = args.get("name_filter")
     service_uuid: str | None = args.get("service_uuid")
 
-    entry = await state.start_scan(timeout, name_prefix=name_prefix, service_uuid=service_uuid)
+    entry = await state.start_scan(timeout, name_filter=name_filter, service_uuid=service_uuid)
     return _ok(scan_id=entry.scan_id)
 
 
@@ -355,7 +448,16 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
     async def _do_connect():
         await client.connect()
 
-    await _retry(_do_connect)
+    # Hard outer deadline — bleak's timeout is unreliable on some platforms
+    try:
+        await asyncio.wait_for(_retry(_do_connect), timeout=timeout + 5)
+    except asyncio.TimeoutError:
+        # Best-effort cleanup of half-open connection
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        return _err("timeout", f"Connection to {address} timed out after {timeout}s.")
 
     if not client.is_connected:
         return _err("connect_failed", f"Failed to connect to {address}")
@@ -372,9 +474,39 @@ async def handle_disconnect(state: BleState, args: dict[str, Any]) -> dict[str, 
     return _ok()
 
 
-async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+async def handle_connection_status(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     entry = state.get_connection(cid)
+    connected = not entry.disconnected and entry.client.is_connected
+    result: dict[str, Any] = {"connected": connected, "address": entry.address}
+    if entry.disconnected and entry.disconnect_ts is not None:
+        result["disconnect_ts"] = entry.disconnect_ts
+    return _ok(**result)
+
+
+async def handle_pair(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    cid = args["connection_id"]
+    entry = state.require_connected(cid)
+    try:
+        paired = await entry.client.pair()
+    except NotImplementedError:
+        return _err("not_supported", "Pairing is not supported on this platform/backend.")
+    return _ok(paired=paired)
+
+
+async def handle_unpair(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    cid = args["connection_id"]
+    entry = state.require_connected(cid)
+    try:
+        result = await entry.client.unpair()
+    except NotImplementedError:
+        return _err("not_supported", "Unpairing is not supported on this platform/backend.")
+    return _ok(unpaired=result)
+
+
+async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    cid = args["connection_id"]
+    entry = state.require_connected(cid)
 
     if entry.discovered_services is not None:
         return _ok(services=entry.discovered_services)
@@ -384,10 +516,15 @@ async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, An
     for svc in services:
         chars = []
         for c in svc.characteristics:
-            chars.append({
+            descs = [{"uuid": d.uuid, "handle": d.handle} for d in c.descriptors]
+            char_info: dict[str, Any] = {
                 "uuid": c.uuid,
                 "properties": c.properties,
-            })
+                "handle": c.handle,
+            }
+            if descs:
+                char_info["descriptors"] = descs
+            chars.append(char_info)
         services_snapshot.append({
             "uuid": svc.uuid,
             "characteristics": chars,
@@ -397,10 +534,17 @@ async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, An
     return _ok(services=services_snapshot)
 
 
+async def handle_mtu(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    cid = args["connection_id"]
+    entry = state.require_connected(cid)
+    mtu = entry.client.mtu_size
+    return _ok(mtu=mtu, max_write_payload=mtu - 3)
+
+
 async def handle_read(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     char_uuid = normalize_uuid(args["char_uuid"])
-    entry = state.get_connection(cid)
+    entry = state.require_connected(cid)
 
     data: bytearray = await _retry(lambda: entry.client.read_gatt_char(char_uuid))
     raw = bytes(data)
@@ -420,7 +564,7 @@ async def handle_write(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
         return _err("uuid_not_allowed", f"Characteristic {char_uuid} is not in the write allowlist.")
 
     cid = args["connection_id"]
-    entry = state.get_connection(cid)
+    entry = state.require_connected(cid)
 
     value_b64 = args.get("value_b64")
     value_hex = args.get("value_hex")
@@ -436,10 +580,41 @@ async def handle_write(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     return _ok()
 
 
+async def handle_read_descriptor(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    cid = args["connection_id"]
+    handle = int(args["handle"])
+    entry = state.require_connected(cid)
+    data: bytearray = await _retry(lambda: entry.client.read_gatt_descriptor(handle))
+    raw = bytes(data)
+    return _ok(
+        value_b64=base64.b64encode(raw).decode(),
+        value_hex=raw.hex(),
+        value_len=len(raw),
+    )
+
+
+async def handle_write_descriptor(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    if not ALLOW_WRITES:
+        return _err("writes_disabled", "Writes are disabled. Start the server with BLE_MCP_ALLOW_WRITES=true.")
+    cid = args["connection_id"]
+    handle = int(args["handle"])
+    entry = state.require_connected(cid)
+    value_b64 = args.get("value_b64")
+    value_hex = args.get("value_hex")
+    if value_b64:
+        data = base64.b64decode(value_b64)
+    elif value_hex:
+        data = bytes.fromhex(value_hex)
+    else:
+        return _err("missing_value", "Provide value_b64 or value_hex.")
+    await _retry(lambda: entry.client.write_gatt_descriptor(handle, data))
+    return _ok()
+
+
 async def handle_subscribe(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     char_uuid = normalize_uuid(args["char_uuid"])
-    entry = state.get_connection(cid)
+    entry = state.require_connected(cid)
     sub = await state.add_subscription(entry, char_uuid)
     logger.info("Subscribed %s on %s -> %s", char_uuid, cid, sub.subscription_id)
     return _ok(subscription_id=sub.subscription_id)
@@ -477,7 +652,7 @@ def _validate_subscription(state: BleState, cid: str, sid: str) -> dict[str, Any
     """Validate connection + subscription. Returns error dict or (None, sub)."""
     from ble_mcp_server.state import Subscription  # noqa: F811 (for type hint only)
 
-    state.get_connection(cid)
+    state.require_connected(cid)
     sub = state.subscriptions.get(sid)
     if sub is None:
         return _err("unknown_subscription", f"Unknown subscription_id: {sid}")
@@ -553,9 +728,15 @@ _HANDLERS: dict[str, Any] = {
     "ble.scan_stop": handle_scan_stop,
     "ble.connect": handle_connect,
     "ble.disconnect": handle_disconnect,
+    "ble.connection_status": handle_connection_status,
+    "ble.pair": handle_pair,
+    "ble.unpair": handle_unpair,
     "ble.discover": handle_discover,
+    "ble.mtu": handle_mtu,
     "ble.read": handle_read,
     "ble.write": handle_write,
+    "ble.read_descriptor": handle_read_descriptor,
+    "ble.write_descriptor": handle_write_descriptor,
     "ble.subscribe": handle_subscribe,
     "ble.unsubscribe": handle_unsubscribe,
     "ble.wait_notification": handle_wait_notification,
@@ -586,6 +767,8 @@ def build_server() -> tuple[Server, BleState]:
             result = await handler(state, arguments)
         except KeyError as exc:
             result = _err("not_found", str(exc))
+        except ConnectionError as exc:
+            result = _err("disconnected", str(exc))
         except asyncio.TimeoutError:
             result = _err("timeout", "BLE operation timed out.")
         except Exception as exc:

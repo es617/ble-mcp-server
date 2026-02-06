@@ -51,7 +51,7 @@ Then in Claude Code, try:
 
 ### Scan workflow
 
-1. **Start**: `ble.scan_start` with optional filters (`name_prefix`, `service_uuid`) and a `timeout_s` ceiling
+1. **Start**: `ble.scan_start` with optional filters (`name_filter`, `service_uuid`) and a `timeout_s` ceiling
 2. **Check**: `ble.scan_get_results` to see what's been found so far (non-blocking, call as many times as needed)
 3. **Stop**: `ble.scan_stop` when you've found what you need, or let it auto-stop at `timeout_s`
 
@@ -126,7 +126,7 @@ All tools return structured JSON:
 Start a background BLE scan. Returns a `scan_id` immediately. The scan runs for up to `timeout_s` seconds (auto-stops), or you can stop it early with `ble.scan_stop`.
 
 ```json
-{ "timeout_s": 10, "name_prefix": "Arduino", "service_uuid": "180a" }
+{ "timeout_s": 10, "name_filter": "Arduino", "service_uuid": "180a" }
 ```
 
 Returns `{ "ok": true, "scan_id": "a1b2c3" }`.
@@ -139,7 +139,25 @@ Non-blocking: return the devices discovered so far by a running (or finished) sc
 { "scan_id": "a1b2c3" }
 ```
 
-Returns `{ "ok": true, "devices": [{ "name": "...", "address": "...", "rssi": -55 }], "active": true }`.
+Returns:
+
+```json
+{
+  "ok": true,
+  "active": true,
+  "devices": [{
+    "name": "Arduino",
+    "address": "AA:BB:CC:DD:EE:FF",
+    "rssi": -55,
+    "tx_power": -12,
+    "service_uuids": ["0000180a-0000-1000-8000-00805f9b34fb"],
+    "manufacturer_data": { "76": "0215..." },
+    "service_data": { "0000180a-...": "0a1b" }
+  }]
+}
+```
+
+Fields `tx_power`, `service_uuids`, `manufacturer_data`, and `service_data` are included when advertised by the device. `manufacturer_data` keys are company IDs; values are hex-encoded. `service_data` keys are UUIDs; values are hex-encoded.
 
 ### ble.scan_stop
 
@@ -167,6 +185,34 @@ Returns `{ "ok": true, "connection_id": "abc123", "address": "..." }`.
 { "connection_id": "abc123" }
 ```
 
+### ble.connection_status
+
+Check whether a connection is still alive. If the device disconnected unexpectedly, the server detects it automatically and returns a clear status instead of letting subsequent calls fail with timeouts.
+
+```json
+{ "connection_id": "abc123" }
+```
+
+Returns `{ "ok": true, "connected": true, "address": "AA:BB:CC:DD:EE:FF" }` or `{ "ok": true, "connected": false, "address": "...", "disconnect_ts": 1700000000.0 }`.
+
+### ble.pair
+
+Pair (bond) with a connected device. Required by some devices before they allow access to secured characteristics.
+
+```json
+{ "connection_id": "abc123" }
+```
+
+Returns `{ "ok": true, "paired": true }` or an error if the platform doesn't support pairing.
+
+### ble.unpair
+
+Remove pairing (bond) with a connected device.
+
+```json
+{ "connection_id": "abc123" }
+```
+
 ### ble.discover
 
 List services and characteristics (cached per connection).
@@ -175,7 +221,17 @@ List services and characteristics (cached per connection).
 { "connection_id": "abc123" }
 ```
 
-Returns `{ "ok": true, "services": [{ "uuid": "...", "characteristics": [{ "uuid": "...", "properties": ["read", "notify"] }] }] }`.
+Returns `{ "ok": true, "services": [{ "uuid": "...", "characteristics": [{ "uuid": "...", "handle": 3, "properties": ["read", "notify"], "descriptors": [{ "uuid": "...", "handle": 5 }] }] }] }`.
+
+### ble.mtu
+
+Return the negotiated MTU for a connection. The effective max write payload per packet is `mtu - 3` bytes (ATT header overhead).
+
+```json
+{ "connection_id": "abc123" }
+```
+
+Returns `{ "ok": true, "mtu": 517, "max_write_payload": 514 }`.
 
 ### ble.read
 
@@ -193,6 +249,24 @@ Write to a characteristic (requires `BLE_MCP_ALLOW_WRITES=true`).
 
 ```json
 { "connection_id": "abc123", "char_uuid": "2a00", "value_hex": "0102", "with_response": true }
+```
+
+### ble.read_descriptor
+
+Read a GATT descriptor by handle. Handles are returned by `ble.discover`.
+
+```json
+{ "connection_id": "abc123", "handle": 5 }
+```
+
+Returns `{ "ok": true, "value_b64": "...", "value_hex": "...", "value_len": 2 }`.
+
+### ble.write_descriptor
+
+Write to a GATT descriptor by handle (requires `BLE_MCP_ALLOW_WRITES=true`). Rarely needed directly — bleak handles CCCD for notify/indicate automatically.
+
+```json
+{ "connection_id": "abc123", "handle": 5, "value_hex": "0100" }
 ```
 
 ### ble.subscribe

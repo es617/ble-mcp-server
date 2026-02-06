@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ble_mcp_server.state import BleState, normalize_uuid
+from ble_mcp_server.state import BleState, ConnectionEntry, normalize_uuid
 
 
 # ---------------------------------------------------------------------------
@@ -68,12 +68,11 @@ class TestWriteGate:
             srv.ALLOW_WRITES = True
             srv.WRITE_ALLOWLIST = None
 
-            # We still need a valid connection — use a mock
+            # We still need a valid connection — use a mock client in a real entry
             state = BleState()
             mock_client = MagicMock()
             mock_client.is_connected = True
-            entry = MagicMock()
-            entry.client = mock_client
+            entry = ConnectionEntry(connection_id="c1", address="AA:BB:CC:DD:EE:FF", client=mock_client)
             state.connections["c1"] = entry
 
             result = await srv.handle_write(state, {
