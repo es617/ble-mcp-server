@@ -338,3 +338,8 @@ If you are running in a container or headless environment, ensure `dbus` and `bl
 ## License
 
 [MIT](LICENSE)
+
+
+## Acknowledgements
+
+- This project is built on top of the excellent [bleak](https://github.com/hbldh/bleak) library for cross-platform BLE in Python.
