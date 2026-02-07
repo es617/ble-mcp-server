@@ -94,6 +94,7 @@ class ConnectionEntry:
     discovered_services: list[dict[str, Any]] | None = None
     disconnected: bool = False
     disconnect_ts: float | None = None
+    spec: dict[str, Any] | None = None  # Attached spec cache (in-memory, per session)
 
 
 class BleState:

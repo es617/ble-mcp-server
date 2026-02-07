@@ -23,7 +23,7 @@ class TestWriteGate:
         with patch.dict(os.environ, {"BLE_MCP_ALLOW_WRITES": ""}):
             # Re-import to pick up the patched env — simpler: just call handler
             # directly and check the gate.
-            from ble_mcp_server.server import handle_write
+            from ble_mcp_server.handlers_ble import handle_write
 
             state = BleState()
             result = await handle_write(state, {
@@ -37,7 +37,7 @@ class TestWriteGate:
     @pytest.mark.asyncio
     async def test_allowlist_blocks_uuid(self):
         """Even when writes are globally enabled, non-listed UUIDs are rejected."""
-        import ble_mcp_server.server as srv
+        import ble_mcp_server.handlers_ble as srv
 
         old_allow = srv.ALLOW_WRITES
         old_list = srv.WRITE_ALLOWLIST
@@ -60,7 +60,7 @@ class TestWriteGate:
     @pytest.mark.asyncio
     async def test_missing_value_returns_error(self):
         """Write with no value_b64 or value_hex gives a clear error."""
-        import ble_mcp_server.server as srv
+        import ble_mcp_server.handlers_ble as srv
 
         old_allow = srv.ALLOW_WRITES
         old_list = srv.WRITE_ALLOWLIST
@@ -93,19 +93,19 @@ class TestWriteGate:
 
 class TestResultFormat:
     def test_ok_shape(self):
-        from ble_mcp_server.server import _ok
+        from ble_mcp_server.helpers import _ok
 
         r = _ok(foo="bar")
         assert r == {"ok": True, "foo": "bar"}
 
     def test_err_shape(self):
-        from ble_mcp_server.server import _err
+        from ble_mcp_server.helpers import _err
 
         r = _err("some_code", "some message")
         assert r == {"ok": False, "error": {"code": "some_code", "message": "some message"}}
 
     def test_result_text_is_json(self):
-        from ble_mcp_server.server import _result_text
+        from ble_mcp_server.helpers import _result_text
 
         payload = {"ok": True, "x": 1}
         texts = _result_text(payload)

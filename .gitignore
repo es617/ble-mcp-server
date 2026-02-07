@@ -7,3 +7,4 @@ build/
 *.egg
 .pytest_cache/
 .venv/
+.ble_mcp/index.json
