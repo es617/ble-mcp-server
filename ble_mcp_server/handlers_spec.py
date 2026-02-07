@@ -63,7 +63,11 @@ TOOLS: list[Tool] = [
         name="ble.spec.attach",
         description=(
             "Attach a registered spec to a connection session (in-memory only). "
-            "The spec will be available via ble.spec.get for the duration of this connection."
+            "The spec will be available via ble.spec.get for the duration of this connection. "
+            "After attaching, you should offer to: interact with the device directly "
+            "following the spec (read/write characteristics, execute flows), "
+            "write a Python script or CLI tool for this device, or create "
+            "a new MCP server exposing this device's protocol as high-level tools."
         ),
         inputSchema={
             "type": "object",
@@ -164,11 +168,6 @@ async def handle_spec_attach(state: BleState, args: dict[str, Any]) -> dict[str,
     return _ok(
         spec_id=spec_id,
         path=spec_data["path"],
-        next_steps=[
-            "Interact with the device directly following the spec (read/write characteristics, execute flows)",
-            "Write a Python script or CLI tool for this device based on the spec",
-            "Create a new MCP server that exposes this device's protocol as high-level tools",
-        ],
     )
 
 

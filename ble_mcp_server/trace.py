@@ -1,0 +1,110 @@
+"""JSONL tracing for BLE MCP tool calls.
+
+In-memory ring buffer with optional file sink. Tracing is off by default;
+set ``BLE_MCP_TRACE=1`` to enable.  No BLE imports.
+"""
+
+from __future__ import annotations
+
+import collections
+import copy
+import json
+import os
+from datetime import datetime, timezone
+from typing import Any
+
+# ---------------------------------------------------------------------------
+# Configuration (read at import time, same pattern as helpers.py)
+# ---------------------------------------------------------------------------
+
+TRACE_ENABLED = os.environ.get("BLE_MCP_TRACE", "1").lower() not in ("0", "false", "no")
+TRACE_PAYLOADS = os.environ.get("BLE_MCP_TRACE_PAYLOADS", "").lower() in ("1", "true", "yes")
+TRACE_MAX_BYTES = int(os.environ.get("BLE_MCP_TRACE_MAX_BYTES", "16384"))
+
+# ---------------------------------------------------------------------------
+# Sanitize args
+# ---------------------------------------------------------------------------
+
+_PAYLOAD_KEYS = {"value_b64", "value_hex"}
+
+
+def sanitize_args(args: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *args* with payload values stripped or truncated."""
+    out = copy.deepcopy(args)
+    for key in _PAYLOAD_KEYS:
+        if key not in out:
+            continue
+        if not TRACE_PAYLOADS:
+            del out[key]
+        else:
+            val = out[key]
+            if isinstance(val, str) and len(val) > TRACE_MAX_BYTES:
+                out[key] = val[:TRACE_MAX_BYTES] + "\u2026"
+    return out
+
+
+# ---------------------------------------------------------------------------
+# TraceBuffer
+# ---------------------------------------------------------------------------
+
+
+class TraceBuffer:
+    """Ring buffer of trace events with optional JSONL file sink."""
+
+    def __init__(self, max_items: int = 2000, file_path: str | None = None) -> None:
+        self._deque: collections.deque[dict[str, Any]] = collections.deque(maxlen=max_items)
+        self._file_path = file_path
+        self._fh = None
+        if file_path:
+            self._fh = open(file_path, "a", encoding="utf-8")  # noqa: SIM115
+
+    def emit(self, event: dict[str, Any]) -> None:
+        event["ts"] = datetime.now(timezone.utc).isoformat()
+        self._deque.append(event)
+        if self._fh:
+            self._fh.write(json.dumps(event, default=str) + "\n")
+            self._fh.flush()
+
+    def tail(self, n: int = 50) -> list[dict[str, Any]]:
+        items = list(self._deque)
+        return items[-n:]
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "enabled": True,
+            "event_count": len(self._deque),
+            "file_path": self._file_path,
+            "payloads_logged": TRACE_PAYLOADS,
+            "max_payload_bytes": TRACE_MAX_BYTES,
+        }
+
+    def close(self) -> None:
+        if self._fh:
+            self._fh.close()
+            self._fh = None
+
+
+# ---------------------------------------------------------------------------
+# Module-level singleton
+# ---------------------------------------------------------------------------
+
+_buffer: TraceBuffer | None = None
+
+
+def get_trace_buffer() -> TraceBuffer | None:
+    return _buffer
+
+
+def init_trace() -> TraceBuffer | None:
+    """Called once at startup. Returns buffer if tracing enabled, else None."""
+    global _buffer
+    if not TRACE_ENABLED:
+        return None
+    path = os.environ.get("BLE_MCP_TRACE_PATH")
+    if not path:
+        from ble_mcp_server.specs import resolve_spec_root
+
+        path = str(resolve_spec_root() / "traces" / "trace.jsonl")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _buffer = TraceBuffer(file_path=path)
+    return _buffer

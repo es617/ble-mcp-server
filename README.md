@@ -112,192 +112,69 @@ claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 | `BLE_MCP_ALLOW_WRITES` | disabled | Set to `true`, `1`, or `yes` to enable `ble.write`. |
 | `BLE_MCP_WRITE_ALLOWLIST` | empty | Comma-separated UUID allowlist for writable characteristics (checked only when writes are enabled). |
 | `BLE_MCP_LOG_LEVEL` | `WARNING` | Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Logs go to stderr. |
+| `BLE_MCP_TRACE` | enabled | JSONL tracing of every tool call. Set to `0`, `false`, or `no` to disable. |
+| `BLE_MCP_TRACE_PATH` | `.ble_mcp/traces/trace.jsonl` | Path to the JSONL trace file. |
+| `BLE_MCP_TRACE_PAYLOADS` | disabled | Include `value_b64`/`value_hex` in traced args (stripped by default). |
+| `BLE_MCP_TRACE_MAX_BYTES` | `16384` | Max payload chars before truncation (only applies when `TRACE_PAYLOADS` is on). |
 
 ---
 
 ## Tools
 
-All tools return structured JSON:
-`{ "ok": true, ... }` on success,
-`{ "ok": false, "error": { "code": "...", "message": "..." } }` on failure.
+See the full [Tools Reference](docs/tools.md) for detailed input/output schemas.
 
-### ble.scan_start
+| Category | Tools |
+|---|---|
+| **BLE Core** | `ble.scan_start`, `ble.scan_get_results`, `ble.scan_stop`, `ble.connect`, `ble.disconnect`, `ble.connection_status`, `ble.discover`, `ble.mtu`, `ble.read`, `ble.write`, `ble.read_descriptor`, `ble.write_descriptor`, `ble.subscribe`, `ble.unsubscribe`, `ble.wait_notification`, `ble.poll_notifications`, `ble.drain_notifications` |
+| **Protocol Specs** | `ble.spec.template`, `ble.spec.register`, `ble.spec.list`, `ble.spec.attach`, `ble.spec.get`, `ble.spec.read`, `ble.spec.search` |
+| **Tracing** | `ble.trace.status`, `ble.trace.tail` |
 
-Start a background BLE scan. Returns a `scan_id` immediately. The scan runs for up to `timeout_s` seconds (auto-stops), or you can stop it early with `ble.scan_stop`.
+---
 
-```json
-{ "timeout_s": 10, "name_filter": "Arduino", "service_uuid": "180a" }
+## Protocol Specs
+
+Specs are markdown files with YAML front-matter that describe a BLE device's protocol — services, characteristics, commands, and multi-step flows. They live in `.ble_mcp/specs/` and are indexed for lookup.
+
+### Quick start
+
+1. **Generate a template**: use `ble.spec.template` (optionally with a device name)
+2. **Write the file**: save it to `.ble_mcp/specs/my-device.md` and fill in the protocol details
+3. **Register**: use `ble.spec.register` to validate and index the spec
+4. **Attach to a connection**: use `ble.spec.attach` to bind a spec to an active BLE session
+5. **Reference during interaction**: the agent can use `ble.spec.get`, `ble.spec.read`, and `ble.spec.search` to look up protocol details while talking to the device
+
+### Front-matter format
+
+```yaml
+---
+kind: ble-protocol
+name: "My Device Protocol"
+---
 ```
 
-Returns `{ "ok": true, "scan_id": "a1b2c3" }`.
+`kind` and `name` are required.
 
-### ble.scan_get_results
+---
 
-Non-blocking: return the devices discovered so far by a running (or finished) scan.
+## Tracing
 
-```json
-{ "scan_id": "a1b2c3" }
+Every tool call is traced to a JSONL file and an in-memory ring buffer (last 2000 events). Tracing is **on by default** — set `BLE_MCP_TRACE=0` to disable.
+
+### Event format
+
+Two events per tool call:
+
+```jsonl
+{"ts":"2025-01-01T00:00:00.000Z","event":"tool_call_start","tool":"ble.read","args":{"connection_id":"c1","char_uuid":"2a00"},"connection_id":"c1"}
+{"ts":"2025-01-01T00:00:00.050Z","event":"tool_call_end","tool":"ble.read","ok":true,"error_code":null,"duration_ms":50,"connection_id":"c1"}
 ```
 
-Returns:
+- `connection_id` is extracted from args when present
+- `value_b64` and `value_hex` are stripped from traced args by default (enable with `BLE_MCP_TRACE_PAYLOADS=1`)
 
-```json
-{
-  "ok": true,
-  "active": true,
-  "devices": [{
-    "name": "Arduino",
-    "address": "AA:BB:CC:DD:EE:FF",
-    "rssi": -55,
-    "tx_power": -12,
-    "service_uuids": ["0000180a-0000-1000-8000-00805f9b34fb"],
-    "manufacturer_data": { "76": "0215..." },
-    "service_data": { "0000180a-...": "0a1b" }
-  }]
-}
-```
+### Inspecting the trace
 
-Fields `tx_power`, `service_uuids`, `manufacturer_data`, and `service_data` are included when advertised by the device. `manufacturer_data` keys are company IDs; values are hex-encoded. `service_data` keys are UUIDs; values are hex-encoded.
-
-### ble.scan_stop
-
-Stop a running scan early and return the final device list. Safe to call on an already-finished scan.
-
-```json
-{ "scan_id": "a1b2c3" }
-```
-
-Returns `{ "ok": true, "devices": [...], "active": false }`.
-
-### ble.connect
-
-Connect to a device by address.
-
-```json
-{ "address": "AA:BB:CC:DD:EE:FF", "timeout_s": 10, "pair": true }
-```
-
-Set `pair` to `true` to bond during connection. Pairing works on Linux (BlueZ) and Windows (WinRT). On macOS, the OS pairs automatically when you access a secured characteristic, so this flag is not needed.
-
-Returns `{ "ok": true, "connection_id": "abc123", "address": "..." }`.
-
-### ble.disconnect
-
-```json
-{ "connection_id": "abc123" }
-```
-
-### ble.connection_status
-
-Check whether a connection is still alive. If the device disconnected unexpectedly, the server detects it automatically and returns a clear status instead of letting subsequent calls fail with timeouts.
-
-```json
-{ "connection_id": "abc123" }
-```
-
-Returns `{ "ok": true, "connected": true, "address": "AA:BB:CC:DD:EE:FF" }` or `{ "ok": true, "connected": false, "address": "...", "disconnect_ts": 1700000000.0 }`.
-
-### ble.discover
-
-List services and characteristics (cached per connection).
-
-```json
-{ "connection_id": "abc123" }
-```
-
-Returns `{ "ok": true, "services": [{ "uuid": "...", "characteristics": [{ "uuid": "...", "handle": 3, "properties": ["read", "notify"], "descriptors": [{ "uuid": "...", "handle": 5 }] }] }] }`.
-
-### ble.mtu
-
-Return the negotiated MTU for a connection. The effective max write payload per packet is `mtu - 3` bytes (ATT header overhead).
-
-```json
-{ "connection_id": "abc123" }
-```
-
-Returns `{ "ok": true, "mtu": 517, "max_write_payload": 514 }`.
-
-### ble.read
-
-Read a characteristic value.
-
-```json
-{ "connection_id": "abc123", "char_uuid": "2a00" }
-```
-
-Returns `{ "ok": true, "value_b64": "...", "value_hex": "...", "value_len": 4 }`.
-
-### ble.write
-
-Write to a characteristic (requires `BLE_MCP_ALLOW_WRITES=true`).
-
-```json
-{ "connection_id": "abc123", "char_uuid": "2a00", "value_hex": "0102", "with_response": true }
-```
-
-### ble.read_descriptor
-
-Read a GATT descriptor by handle. Handles are returned by `ble.discover`.
-
-```json
-{ "connection_id": "abc123", "handle": 5 }
-```
-
-Returns `{ "ok": true, "value_b64": "...", "value_hex": "...", "value_len": 2 }`.
-
-### ble.write_descriptor
-
-Write to a GATT descriptor by handle (requires `BLE_MCP_ALLOW_WRITES=true`). Rarely needed directly — bleak handles CCCD for notify/indicate automatically.
-
-```json
-{ "connection_id": "abc123", "handle": 5, "value_hex": "0100" }
-```
-
-### ble.subscribe
-
-Subscribe to notifications on a characteristic.
-
-```json
-{ "connection_id": "abc123", "char_uuid": "2a37" }
-```
-
-Returns `{ "ok": true, "subscription_id": "sub456" }`.
-
-### ble.unsubscribe
-
-```json
-{ "connection_id": "abc123", "subscription_id": "sub456" }
-```
-
-### ble.wait_notification
-
-Block until the next single notification arrives, or timeout. For bursty/bulk flows prefer `ble.drain_notifications`.
-
-```json
-{ "connection_id": "abc123", "subscription_id": "sub456", "timeout_s": 10 }
-```
-
-Returns `{ "ok": true, "notification": { "value_b64": "...", "value_hex": "...", "ts": 1700000000.0 } }` or `{ "ok": true, "notification": null }` on timeout.
-
-### ble.poll_notifications
-
-Non-blocking: return up to `max_items` buffered notifications immediately (or an empty list).
-
-```json
-{ "connection_id": "abc123", "subscription_id": "sub456", "max_items": 50 }
-```
-
-Returns `{ "ok": true, "notifications": [...], "dropped": 0 }`.
-
-### ble.drain_notifications
-
-Batch-collect: waits up to `timeout_s` for the first notification, then keeps collecting until `idle_timeout_s` passes with no new data, `max_items` is reached, or `timeout_s` expires. Ideal for bursty flows like downloading a log file or dataset over BLE notifications.
-
-```json
-{ "connection_id": "abc123", "subscription_id": "sub456", "timeout_s": 2, "idle_timeout_s": 0.25, "max_items": 200 }
-```
-
-Returns `{ "ok": true, "notifications": [...], "dropped": 0 }`.
+Use `ble.trace.status` to check config and event count, and `ble.trace.tail` to retrieve recent events — no need to read the file directly.
 
 ---
 

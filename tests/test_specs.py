@@ -26,9 +26,6 @@ VALID_SPEC = """\
 ---
 kind: ble-protocol
 name: "Test Device"
-device_name_contains: "TestDev"
-service_uuids:
-  - "180a"
 ---
 
 # Test Device Protocol
@@ -185,7 +182,6 @@ class TestRegisterSpec:
         result = register_spec(spec_file)
         assert result["name"] == "Test Device"
         assert result["spec_id"]
-        assert result["device_name_contains"] == "TestDev"
 
     def test_missing_file(self, monkeypatch, tmp_path):
         _setup_env(monkeypatch, tmp_path)
@@ -226,7 +222,6 @@ class TestListSpecs:
         assert len(result) == 1
         assert result[0]["spec_id"] == entry["spec_id"]
         assert result[0]["name"] == "Test Device"
-        assert result[0]["device_name_contains"] == "TestDev"
 
     def test_multiple(self, monkeypatch, tmp_path):
         _setup_env(monkeypatch, tmp_path)
@@ -328,7 +323,7 @@ class TestGetTemplate:
     def test_with_device_name(self):
         template = get_template("SensorTag")
         assert "SensorTag" in template
-        assert 'device_name_contains: "SensorTag"' in template
+        assert 'name: "SensorTag Protocol"' in template
 
 
 # ---------------------------------------------------------------------------

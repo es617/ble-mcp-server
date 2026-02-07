@@ -7,15 +7,17 @@ import logging
 import os
 import signal
 import sys
+import time
 from typing import Any
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from ble_mcp_server import handlers_ble, handlers_spec
+from ble_mcp_server import handlers_ble, handlers_spec, handlers_trace
 from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _ok, _result_text
 from ble_mcp_server.state import BleState
+from ble_mcp_server.trace import get_trace_buffer, init_trace, sanitize_args
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -33,8 +35,8 @@ logger = logging.getLogger("ble_mcp_server")
 # Tool & handler registry (merged from handler modules)
 # ---------------------------------------------------------------------------
 
-TOOLS: list[Tool] = handlers_ble.TOOLS + handlers_spec.TOOLS
-_HANDLERS: dict[str, Any] = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS}
+TOOLS: list[Tool] = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS
+_HANDLERS: dict[str, Any] = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
 
 # ---------------------------------------------------------------------------
 # Server construction
@@ -52,6 +54,14 @@ def build_server() -> tuple[Server, BleState]:
     @server.call_tool()
     async def _call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextContent]:
         arguments = arguments or {}
+
+        buf = get_trace_buffer()
+        if buf:
+            cid = arguments.get("connection_id")
+            safe_args = sanitize_args(arguments)
+            buf.emit({"event": "tool_call_start", "tool": name, "args": safe_args, "connection_id": cid})
+            t0 = time.monotonic()
+
         handler = _HANDLERS.get(name)
         if handler is None:
             return _result_text(_err("unknown_tool", f"No tool named {name}"))
@@ -66,8 +76,21 @@ def build_server() -> tuple[Server, BleState]:
         except Exception as exc:
             logger.error("Unhandled error in %s: %s", name, exc, exc_info=True)
             result = _err("internal", str(exc))
+
+        if buf:
+            duration_ms = round((time.monotonic() - t0) * 1000, 1)
+            buf.emit({
+                "event": "tool_call_end",
+                "tool": name,
+                "ok": result.get("ok"),
+                "error_code": result.get("error", {}).get("code") if isinstance(result.get("error"), dict) else None,
+                "duration_ms": duration_ms,
+                "connection_id": cid,
+            })
+
         return _result_text(result)
 
+    init_trace()
     return server, state
 
 
@@ -105,11 +128,17 @@ async def _run() -> None:
 
     # After server.run returns, clean up BLE connections
     await state.shutdown()
+    buf = get_trace_buffer()
+    if buf:
+        buf.close()
 
 
 async def _graceful_shutdown(state: BleState, server: Server) -> None:
     logger.info("Graceful shutdown: disconnecting all BLE clients")
     await state.shutdown()
+    buf = get_trace_buffer()
+    if buf:
+        buf.close()
 
 
 def main() -> None:

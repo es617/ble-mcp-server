@@ -198,12 +198,6 @@ def register_spec(path: str | Path) -> dict[str, Any]:
         "name": meta["name"],
         "kind": meta["kind"],
     }
-    # Copy optional matching fields
-    if "device_name_contains" in meta:
-        entry["device_name_contains"] = meta["device_name_contains"]
-    if "service_uuids" in meta:
-        entry["service_uuids"] = meta["service_uuids"]
-
     index[spec_id] = entry
     _save_index(spec_root, index)
 
@@ -308,14 +302,10 @@ def suggest_spec_path(device_name: str | None = None) -> Path:
 def get_template(device_name: str | None = None) -> str:
     """Return a pre-filled markdown template for a new spec."""
     name_line = f"name: \"{device_name} Protocol\"" if device_name else 'name: "My Device Protocol"'
-    name_contains = f'device_name_contains: "{device_name}"' if device_name else '# device_name_contains: "DeviceName"'
 
     return f"""---
 kind: ble-protocol
 {name_line}
-{name_contains}
-# service_uuids:
-#   - "0000180a-0000-1000-8000-00805f9b34fb"
 ---
 
 # {device_name or "My Device"} BLE Protocol
