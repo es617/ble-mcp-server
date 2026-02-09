@@ -203,7 +203,7 @@ META = {
 3. Restart Claude Code so it picks up the new tools
 4. Hot-reload after edits: call `ble.plugin.reload` — no restart needed
 
-> **Note:** Plugins are loaded when the MCP server starts. New plugin files require a restart. Editing an already-loaded plugin only requires `ble.plugin.reload`.
+> **Note:** Plugins are loaded when the MCP server starts. Editing an already-loaded plugin only requires `ble.plugin.reload` — no restart needed. You can also load new plugins mid-session with `ble.plugin.load`, but most MCP clients (including Claude Code) won't see the new tools until the next restart.
 
 ---
 
