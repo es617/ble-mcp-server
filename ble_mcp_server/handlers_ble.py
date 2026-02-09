@@ -409,8 +409,18 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
         except Exception:
             pass
         return _err("timeout", f"Connection to {address} timed out after {timeout}s.")
+    except Exception:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        raise
 
     if not client.is_connected:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
         return _err("connect_failed", f"Failed to connect to {address}")
 
     # Only register in state after a successful connect

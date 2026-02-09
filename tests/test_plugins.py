@@ -441,6 +441,12 @@ class TestParsePluginPolicy:
         enabled, allowlist = parse_plugin_policy()
         assert enabled is False
 
+    def test_empty_commas_returns_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BLE_MCP_PLUGINS", ",,,")
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is False
+        assert allowlist is None
+
 
 # ---------------------------------------------------------------------------
 # PluginManager — policy enforcement

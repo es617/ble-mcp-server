@@ -40,7 +40,7 @@ def parse_plugin_policy() -> tuple[bool, set[str] | None]:
     if raw in ("*", "all"):
         return True, None
     names = {n.strip() for n in raw.split(",") if n.strip()}
-    return True, names if names else (False, None)
+    return (True, names) if names else (False, None)
 
 
 # ---------------------------------------------------------------------------

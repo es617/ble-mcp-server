@@ -165,6 +165,8 @@ class BleState:
                 for sub in entry.subscriptions.values():
                     sub.active = False
                     sub._stop_event.set()
+                    self.subscriptions.pop(sub.subscription_id, None)
+                entry.subscriptions.clear()
 
         kwargs: dict[str, Any] = {
             "timeout": timeout,
@@ -329,16 +331,13 @@ class BleState:
             try:
                 sub.queue.put_nowait(notification)
             except asyncio.QueueFull:
-                logger.warning("Notification queue full for subscription %s, dropping oldest", sid)
-                sub.dropped += 1
+                # Drop oldest to make room for the latest value
                 try:
                     sub.queue.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
-                try:
-                    sub.queue.put_nowait(notification)
-                except asyncio.QueueFull:
-                    pass
+                sub.queue.put_nowait(notification)
+                sub.dropped += 1
 
         await entry.client.start_notify(char_uuid, _callback)
         entry.subscriptions[sid] = sub
