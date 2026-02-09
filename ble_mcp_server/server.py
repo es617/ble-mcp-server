@@ -87,6 +87,8 @@ def build_server() -> tuple[Server, BleState]:
             result = await handler(state, arguments)
         except KeyError as exc:
             result = _err("not_found", str(exc))
+        except (ValueError, TypeError) as exc:
+            result = _err("invalid_params", str(exc))
         except ConnectionError as exc:
             result = _err("disconnected", str(exc))
         except asyncio.TimeoutError:

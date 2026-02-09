@@ -88,6 +88,9 @@ class TraceBuffer:
             self._fh.close()
             self._fh = None
 
+    def __del__(self) -> None:
+        self.close()
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton

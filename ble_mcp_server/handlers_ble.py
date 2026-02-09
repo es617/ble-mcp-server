@@ -15,6 +15,11 @@ from ble_mcp_server.state import BleState, check_allowlist, normalize_uuid
 logger = logging.getLogger("ble_mcp_server")
 
 
+def _clamp(value: float, lo: float, hi: float) -> float:
+    """Clamp *value* to [lo, hi]."""
+    return max(lo, min(value, hi))
+
+
 def _decode_value(args: dict[str, Any]) -> bytes | dict[str, Any]:
     """Decode ``value_b64`` or ``value_hex`` from *args*.
 
@@ -368,7 +373,7 @@ TOOLS: list[Tool] = [
 
 
 async def handle_scan_start(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
-    timeout = min(float(args.get("timeout_s", 10)), 60)
+    timeout = _clamp(float(args.get("timeout_s", 10)), 0.1, 60)
     name_filter: str | None = args.get("name_filter")
     service_uuid: str | None = args.get("service_uuid")
 
@@ -391,7 +396,7 @@ async def handle_scan_stop(state: BleState, args: dict[str, Any]) -> dict[str, A
 
 async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     address = args["address"]
-    timeout = min(float(args.get("timeout_s", 10)), 60)
+    timeout = _clamp(float(args.get("timeout_s", 10)), 1, 60)
     pair = bool(args.get("pair", False))
 
     entry = state.create_client(address, timeout, pair=pair)
@@ -582,15 +587,12 @@ async def handle_unsubscribe(state: BleState, args: dict[str, Any]) -> dict[str,
 async def handle_wait_notification(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     sid = args["subscription_id"]
-    timeout = min(float(args.get("timeout_s", 10)), 60)
+    timeout = _clamp(float(args.get("timeout_s", 10)), 0.1, 60)
 
-    # Validate connection exists
-    state.get_connection(cid)
-    sub = state.subscriptions.get(sid)
-    if sub is None:
-        return _err("unknown_subscription", f"Unknown subscription_id: {sid}")
-    if sub.connection_id != cid:
-        return _err("subscription_mismatch", "subscription_id does not belong to this connection_id.")
+    result = _validate_subscription(state, cid, sid)
+    if isinstance(result, dict):
+        return result
+    _, sub = result
 
     try:
         notification = await asyncio.wait_for(sub.queue.get(), timeout=timeout)
@@ -615,7 +617,7 @@ def _validate_subscription(state: BleState, cid: str, sid: str) -> dict[str, Any
 async def handle_poll_notifications(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     sid = args["subscription_id"]
-    max_items = min(int(args.get("max_items", 50)), 1000)
+    max_items = int(_clamp(int(args.get("max_items", 50)), 1, 1000))
 
     result = _validate_subscription(state, cid, sid)
     if isinstance(result, dict):
@@ -635,9 +637,9 @@ async def handle_poll_notifications(state: BleState, args: dict[str, Any]) -> di
 async def handle_drain_notifications(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     sid = args["subscription_id"]
-    timeout = min(float(args.get("timeout_s", 2)), 60)
-    idle_timeout = min(float(args.get("idle_timeout_s", 0.25)), 10)
-    max_items = min(int(args.get("max_items", 200)), 5000)
+    timeout = _clamp(float(args.get("timeout_s", 2)), 0.1, 60)
+    idle_timeout = _clamp(float(args.get("idle_timeout_s", 0.25)), 0.01, 10)
+    max_items = int(_clamp(int(args.get("max_items", 200)), 1, 5000))
 
     result = _validate_subscription(state, cid, sid)
     if isinstance(result, dict):
