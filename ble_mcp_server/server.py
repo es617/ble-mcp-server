@@ -16,7 +16,7 @@ from mcp.types import TextContent, Tool
 
 from ble_mcp_server import handlers_ble, handlers_plugin, handlers_spec, handlers_trace
 from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _ok, _result_text
-from ble_mcp_server.plugins import PluginManager
+from ble_mcp_server.plugins import PluginManager, parse_plugin_policy
 from ble_mcp_server.specs import resolve_spec_root
 from ble_mcp_server.state import BleState
 from ble_mcp_server.trace import get_trace_buffer, init_trace, sanitize_args
@@ -57,7 +57,11 @@ def build_server() -> tuple[Server, BleState]:
 
     # --- Plugin system ---
     plugins_dir = resolve_spec_root() / "plugins"
-    manager = PluginManager(plugins_dir, TOOLS, _HANDLERS)
+    plugins_enabled, plugins_allowlist = parse_plugin_policy()
+    manager = PluginManager(
+        plugins_dir, TOOLS, _HANDLERS,
+        enabled=plugins_enabled, allowlist=plugins_allowlist,
+    )
     manager.load_all()
     _HANDLERS.update(handlers_plugin.make_handlers(manager, server))
 

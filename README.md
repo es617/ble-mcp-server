@@ -99,6 +99,12 @@ claude mcp add ble \
   -e BLE_MCP_WRITE_ALLOWLIST="2a00,12345678-1234-1234-1234-123456789abc" \
   -- ble_mcp
 
+# Enable all plugins
+claude mcp add ble -e BLE_MCP_PLUGINS=all -- ble_mcp
+
+# Enable specific plugins only
+claude mcp add ble -e BLE_MCP_PLUGINS=sensortag,hello -- ble_mcp
+
 # Debug logging
 claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 ```
@@ -111,6 +117,7 @@ claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 |---|---|---|
 | `BLE_MCP_ALLOW_WRITES` | disabled | Set to `true`, `1`, or `yes` to enable `ble.write`. |
 | `BLE_MCP_WRITE_ALLOWLIST` | empty | Comma-separated UUID allowlist for writable characteristics (checked only when writes are enabled). |
+| `BLE_MCP_PLUGINS` | disabled | Plugin policy: `all` to allow all, or `name1,name2` to allow specific plugins. Unset = disabled. |
 | `BLE_MCP_LOG_LEVEL` | `WARNING` | Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Logs go to stderr. |
 | `BLE_MCP_TRACE` | enabled | JSONL tracing of every tool call. Set to `0`, `false`, or `no` to disable. |
 | `BLE_MCP_TRACE_PATH` | `.ble_mcp/traces/trace.jsonl` | Path to the JSONL trace file. |
@@ -196,9 +203,17 @@ async def handle_greet(state, args):
 HANDLERS = {"hello.greet": handle_greet}
 ```
 
-2. Restart the server (plugins in `.ble_mcp/plugins/` are auto-loaded on startup)
-3. Or load at runtime: call `ble.plugin.load` with the plugin path
-4. Hot-reload after edits: call `ble.plugin.reload` with the plugin name
+2. Enable plugins and restart the server:
+
+```bash
+claude mcp add ble -e BLE_MCP_PLUGINS=all -- ble_mcp
+# Or allow only specific plugins:
+claude mcp add ble -e BLE_MCP_PLUGINS=hello -- ble_mcp
+```
+3. Restart Claude Code so it picks up the new tools
+4. Hot-reload after edits: call `ble.plugin.reload` with the plugin name — no restart needed
+
+> **Note:** Plugins in `.ble_mcp/plugins/` are loaded when the MCP server starts. If you add a new plugin file, restart the server for it to appear. Editing an already-loaded plugin only requires `ble.plugin.reload` — the server stays running.
 
 ---
 

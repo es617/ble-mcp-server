@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import logging
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,6 +17,30 @@ from typing import Any
 from mcp.types import Tool
 
 logger = logging.getLogger(__name__)
+
+RESERVED_NAMES = frozenset({"all"})
+
+
+# ---------------------------------------------------------------------------
+# Policy
+# ---------------------------------------------------------------------------
+
+
+def parse_plugin_policy() -> tuple[bool, set[str] | None]:
+    """Parse ``BLE_MCP_PLUGINS`` env var.
+
+    Returns ``(enabled, allowlist)``:
+    - unset/empty → ``(False, None)`` — plugins disabled
+    - ``*``       → ``(True, None)``  — all plugins allowed
+    - ``a,b``     → ``(True, {"a", "b"})`` — only named plugins
+    """
+    raw = os.environ.get("BLE_MCP_PLUGINS", "").strip()
+    if not raw:
+        return False, None
+    if raw in ("*", "all"):
+        return True, None
+    names = {n.strip() for n in raw.split(",") if n.strip()}
+    return True, names if names else (False, None)
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +79,9 @@ def load_plugin(plugin_path: Path) -> tuple[str, list[Tool], dict[str, Any], str
         entry = resolved
     else:
         raise ValueError(f"Not a valid plugin path: {plugin_path}")
+
+    if name in RESERVED_NAMES:
+        raise ValueError(f"Plugin name '{name}' is reserved")
 
     path_hash = hashlib.sha256(str(resolved).encode()).hexdigest()[:12]
     module_key = f"ble_mcp_plugin__{name}__{path_hash}"
@@ -141,18 +169,49 @@ class PluginManager:
         plugins_dir: Path,
         tools: list[Tool],
         handlers: dict[str, Any],
+        *,
+        enabled: bool = False,
+        allowlist: set[str] | None = None,
     ) -> None:
         self.plugins_dir = plugins_dir
         self._tools = tools
         self._handlers = handlers
+        self.enabled = enabled
+        self.allowlist = allowlist
         self.loaded: dict[str, PluginInfo] = {}
+
+    @property
+    def policy(self) -> str:
+        """Human-readable policy string."""
+        if not self.enabled:
+            return "disabled"
+        if self.allowlist is None:
+            return "*"
+        return ",".join(sorted(self.allowlist))
+
+    def _check_allowed(self, name: str) -> None:
+        """Raise ``PermissionError`` if the plugin is not allowed by policy."""
+        if not self.enabled:
+            raise PermissionError(
+                "Plugins are disabled. Set BLE_MCP_PLUGINS=all or BLE_MCP_PLUGINS=name1,name2 to enable."
+            )
+        if self.allowlist is not None and name not in self.allowlist:
+            raise PermissionError(
+                f"Plugin '{name}' is not in the allowlist (BLE_MCP_PLUGINS={self.policy})."
+            )
 
     def load(self, plugin_path: Path) -> PluginInfo:
         """Load a plugin and register its tools/handlers.
 
-        Raises ``ValueError`` on name collision or validation failure.
+        Raises ``PermissionError`` if blocked by policy,
+        ``ValueError`` on name collision or validation failure.
         """
         name, tools, handlers, module_key = load_plugin(plugin_path)
+        try:
+            self._check_allowed(name)
+        except PermissionError:
+            sys.modules.pop(module_key, None)
+            raise
 
         # Check for name collisions
         existing_names = {t.name for t in self._tools}
@@ -213,7 +272,12 @@ class PluginManager:
         return self.load(path)
 
     def load_all(self) -> None:
-        """Discover and load all plugins, logging errors but continuing."""
+        """Discover and load all plugins, logging errors but continuing.
+
+        Skips silently when plugins are disabled.
+        """
+        if not self.enabled:
+            return
         paths = discover_plugins(self.plugins_dir)
         for path in paths:
             try:

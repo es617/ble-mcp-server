@@ -10,7 +10,7 @@ import pytest
 
 from mcp.types import Tool
 
-from ble_mcp_server.plugins import PluginManager, discover_plugins, load_plugin
+from ble_mcp_server.plugins import PluginManager, discover_plugins, load_plugin, parse_plugin_policy
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +190,11 @@ HANDLERS = {"b": _h}
         with pytest.raises(ValueError, match="no __init__.py"):
             load_plugin(pkg)
 
+    def test_raises_on_reserved_name(self, tmp_path: Path) -> None:
+        path = _write_plugin(tmp_path / "all.py", VALID_PLUGIN)
+        with pytest.raises(ValueError, match="reserved"):
+            load_plugin(path)
+
     def test_raises_on_syntax_error(self, tmp_path: Path) -> None:
         path = _write_plugin(tmp_path / "broken.py", "def oops(:\n  pass\n")
         with pytest.raises(ValueError, match="Error executing plugin"):
@@ -202,14 +207,16 @@ HANDLERS = {"b": _h}
 
 
 class TestPluginManager:
-    def _make_manager(self, tmp_path: Path) -> tuple[PluginManager, list[Tool], dict[str, Any]]:
+    def _make_manager(
+        self, tmp_path: Path, *, enabled: bool = True, allowlist: set[str] | None = None,
+    ) -> tuple[PluginManager, list[Tool], dict[str, Any]]:
         plugins_dir = tmp_path / "plugins"
-        plugins_dir.mkdir()
+        plugins_dir.mkdir(exist_ok=True)
         tools: list[Tool] = [
             Tool(name="core.tool", description="core", inputSchema={"type": "object", "properties": {}, "required": []}),
         ]
         handlers: dict[str, Any] = {"core.tool": lambda s, a: None}
-        manager = PluginManager(plugins_dir, tools, handlers)
+        manager = PluginManager(plugins_dir, tools, handlers, enabled=enabled, allowlist=allowlist)
         return manager, tools, handlers
 
     def test_load_adds_tools_and_handlers(self, tmp_path: Path) -> None:
@@ -328,7 +335,7 @@ class TestPluginListHandler:
         plugins_dir.mkdir()
         tools: list[Tool] = []
         handlers: dict[str, Any] = {}
-        manager = PluginManager(plugins_dir, tools, handlers)
+        manager = PluginManager(plugins_dir, tools, handlers, enabled=True)
         _write_plugin(plugins_dir / "hello.py", VALID_PLUGIN)
         manager.load(plugins_dir / "hello.py")
 
@@ -350,7 +357,7 @@ class TestPluginListHandler:
         plugins_dir.mkdir()
         tools: list[Tool] = []
         handlers: dict[str, Any] = {}
-        manager = PluginManager(plugins_dir, tools, handlers)
+        manager = PluginManager(plugins_dir, tools, handlers, enabled=True)
 
         plugin_handlers = make_handlers(manager, None)  # type: ignore[arg-type]
         result = await plugin_handlers["ble.plugin.list"](None, {})
@@ -359,3 +366,117 @@ class TestPluginListHandler:
         assert result["count"] == 0
         assert result["plugins"] == []
         assert result["plugins_dir"] == str(plugins_dir)
+
+
+# ---------------------------------------------------------------------------
+# parse_plugin_policy
+# ---------------------------------------------------------------------------
+
+
+class TestParsePluginPolicy:
+    def test_unset_returns_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("BLE_MCP_PLUGINS", raising=False)
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is False
+        assert allowlist is None
+
+    def test_empty_returns_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BLE_MCP_PLUGINS", "")
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is False
+
+    def test_star_returns_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BLE_MCP_PLUGINS", "*")
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is True
+        assert allowlist is None
+
+    def test_all_returns_all(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BLE_MCP_PLUGINS", "all")
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is True
+        assert allowlist is None
+
+    def test_csv_returns_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BLE_MCP_PLUGINS", "sensortag, hello")
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is True
+        assert allowlist == {"sensortag", "hello"}
+
+    def test_whitespace_only_returns_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("BLE_MCP_PLUGINS", "   ")
+        enabled, allowlist = parse_plugin_policy()
+        assert enabled is False
+
+
+# ---------------------------------------------------------------------------
+# PluginManager — policy enforcement
+# ---------------------------------------------------------------------------
+
+
+class TestPluginManagerPolicy:
+    def _make_manager(
+        self, tmp_path: Path, *, enabled: bool = False, allowlist: set[str] | None = None,
+    ) -> tuple[PluginManager, list[Tool], dict[str, Any]]:
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir(exist_ok=True)
+        tools: list[Tool] = []
+        handlers: dict[str, Any] = {}
+        manager = PluginManager(plugins_dir, tools, handlers, enabled=enabled, allowlist=allowlist)
+        return manager, tools, handlers
+
+    def test_load_disabled_raises(self, tmp_path: Path) -> None:
+        manager, _, _ = self._make_manager(tmp_path, enabled=False)
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+
+        with pytest.raises(PermissionError, match="Plugins are disabled"):
+            manager.load(path)
+
+    def test_load_not_in_allowlist_raises(self, tmp_path: Path) -> None:
+        manager, _, _ = self._make_manager(tmp_path, enabled=True, allowlist={"other"})
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+
+        with pytest.raises(PermissionError, match="not in the allowlist"):
+            manager.load(path)
+
+    def test_load_in_allowlist_succeeds(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path, enabled=True, allowlist={"hello"})
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+
+        info = manager.load(path)
+        assert info.name == "hello"
+        assert "test.hello" in handlers
+
+    def test_load_all_skips_when_disabled(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path, enabled=False)
+        _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+
+        manager.load_all()
+
+        assert len(manager.loaded) == 0
+        assert "test.hello" not in handlers
+
+    def test_load_all_respects_allowlist(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path, enabled=True, allowlist={"hello"})
+        _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+        _write_plugin(
+            manager.plugins_dir / "blocked.py",
+            VALID_PLUGIN.replace("test.hello", "test.blocked"),
+        )
+
+        manager.load_all()
+
+        assert "hello" in manager.loaded
+        assert "blocked" not in manager.loaded
+
+    def test_policy_property_disabled(self, tmp_path: Path) -> None:
+        manager, _, _ = self._make_manager(tmp_path, enabled=False)
+        assert manager.policy == "disabled"
+
+    def test_policy_property_star(self, tmp_path: Path) -> None:
+        manager, _, _ = self._make_manager(tmp_path, enabled=True)
+        assert manager.policy == "*"
+
+    def test_policy_property_names(self, tmp_path: Path) -> None:
+        manager, _, _ = self._make_manager(tmp_path, enabled=True, allowlist={"b", "a"})
+        assert manager.policy == "a,b"
