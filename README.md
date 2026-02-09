@@ -128,6 +128,7 @@ See the full [Tools Reference](docs/tools.md) for detailed input/output schemas.
 | **BLE Core** | `ble.scan_start`, `ble.scan_get_results`, `ble.scan_stop`, `ble.connect`, `ble.disconnect`, `ble.connection_status`, `ble.discover`, `ble.mtu`, `ble.read`, `ble.write`, `ble.read_descriptor`, `ble.write_descriptor`, `ble.subscribe`, `ble.unsubscribe`, `ble.wait_notification`, `ble.poll_notifications`, `ble.drain_notifications` |
 | **Protocol Specs** | `ble.spec.template`, `ble.spec.register`, `ble.spec.list`, `ble.spec.attach`, `ble.spec.get`, `ble.spec.read`, `ble.spec.search` |
 | **Tracing** | `ble.trace.status`, `ble.trace.tail` |
+| **Plugins** | `ble.plugin.list`, `ble.plugin.reload`, `ble.plugin.load` |
 
 ---
 
@@ -153,6 +154,51 @@ name: "My Device Protocol"
 ```
 
 `kind` and `name` are required.
+
+---
+
+## Plugins
+
+Plugins let you add device-specific tools without modifying the core server. They live in `.ble_mcp/plugins/` — either as single `.py` files or as packages with an `__init__.py`.
+
+### Plugin contract
+
+A plugin module must export:
+
+```python
+TOOLS: list[Tool]               # Tool definitions (from mcp.types)
+HANDLERS: dict[str, Callable]   # {"tool.name": async_handler_fn}
+```
+
+Handler signature: `async def handler(state: BleState, args: dict) -> dict`
+
+Every key in `HANDLERS` must have a matching `Tool` in `TOOLS` (by name), and vice versa.
+
+### Quick start
+
+1. Create `.ble_mcp/plugins/hello.py`:
+
+```python
+from mcp.types import Tool
+from ble_mcp_server.helpers import _ok
+
+TOOLS = [
+    Tool(
+        name="hello.greet",
+        description="Say hello",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+]
+
+async def handle_greet(state, args):
+    return _ok(message="Hello from plugin!")
+
+HANDLERS = {"hello.greet": handle_greet}
+```
+
+2. Restart the server (plugins in `.ble_mcp/plugins/` are auto-loaded on startup)
+3. Or load at runtime: call `ble.plugin.load` with the plugin path
+4. Hot-reload after edits: call `ble.plugin.reload` with the plugin name
 
 ---
 

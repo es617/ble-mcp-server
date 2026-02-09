@@ -1,0 +1,361 @@
+"""Tests for ble_mcp_server.plugins — no BLE hardware required."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from mcp.types import Tool
+
+from ble_mcp_server.plugins import PluginManager, discover_plugins, load_plugin
+
+
+# ---------------------------------------------------------------------------
+# Helpers — write plugin files into tmp_path
+# ---------------------------------------------------------------------------
+
+
+def _write_plugin(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    return path
+
+
+VALID_PLUGIN = """\
+from mcp.types import Tool
+
+TOOLS = [
+    Tool(
+        name="test.hello",
+        description="Say hello",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+]
+
+async def _handle(state, args):
+    return {"ok": True, "message": "hello"}
+
+HANDLERS = {"test.hello": _handle}
+"""
+
+VALID_PLUGIN_V2 = """\
+from mcp.types import Tool
+
+TOOLS = [
+    Tool(
+        name="test.hello",
+        description="Say hello v2",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+]
+
+async def _handle(state, args):
+    return {"ok": True, "message": "hello v2"}
+
+HANDLERS = {"test.hello": _handle}
+"""
+
+MULTI_TOOL_PLUGIN = """\
+from mcp.types import Tool
+
+TOOLS = [
+    Tool(name="test.a", description="A", inputSchema={"type": "object", "properties": {}, "required": []}),
+    Tool(name="test.b", description="B", inputSchema={"type": "object", "properties": {}, "required": []}),
+]
+
+async def _a(state, args):
+    return {"ok": True}
+
+async def _b(state, args):
+    return {"ok": True}
+
+HANDLERS = {"test.a": _a, "test.b": _b}
+"""
+
+
+# ---------------------------------------------------------------------------
+# discover_plugins
+# ---------------------------------------------------------------------------
+
+
+class TestDiscoverPlugins:
+    def test_finds_py_files_and_package_dirs(self, tmp_path: Path) -> None:
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        _write_plugin(plugins_dir / "alpha.py", VALID_PLUGIN)
+        _write_plugin(plugins_dir / "beta.py", VALID_PLUGIN)
+        pkg = plugins_dir / "gamma"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(VALID_PLUGIN)
+
+        result = discover_plugins(plugins_dir)
+        names = [p.name for p in result]
+        assert names == ["alpha.py", "beta.py", "gamma"]
+
+    def test_ignores_pycache_and_dotfiles(self, tmp_path: Path) -> None:
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        _write_plugin(plugins_dir / "good.py", VALID_PLUGIN)
+        (plugins_dir / "__pycache__").mkdir()
+        (plugins_dir / ".hidden.py").write_text("# hidden")
+        (plugins_dir / "__init__.py").write_text("# top-level init")
+
+        result = discover_plugins(plugins_dir)
+        assert [p.name for p in result] == ["good.py"]
+
+    def test_ignores_dirs_without_init(self, tmp_path: Path) -> None:
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        (plugins_dir / "nopkg").mkdir()
+        (plugins_dir / "nopkg" / "something.py").write_text("x = 1")
+
+        assert discover_plugins(plugins_dir) == []
+
+    def test_returns_empty_for_missing_dir(self, tmp_path: Path) -> None:
+        assert discover_plugins(tmp_path / "nonexistent") == []
+
+
+# ---------------------------------------------------------------------------
+# load_plugin
+# ---------------------------------------------------------------------------
+
+
+class TestLoadPlugin:
+    def test_valid_single_file(self, tmp_path: Path) -> None:
+        path = _write_plugin(tmp_path / "hello.py", VALID_PLUGIN)
+        name, tools, handlers, module_key = load_plugin(path)
+
+        assert name == "hello"
+        assert len(tools) == 1
+        assert tools[0].name == "test.hello"
+        assert "test.hello" in handlers
+        assert module_key.startswith("ble_mcp_plugin__hello__")
+        # Clean up
+        sys.modules.pop(module_key, None)
+
+    def test_valid_package(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "mypkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(VALID_PLUGIN)
+
+        name, tools, handlers, module_key = load_plugin(pkg)
+        assert name == "mypkg"
+        assert len(tools) == 1
+        sys.modules.pop(module_key, None)
+
+    def test_raises_on_missing_tools(self, tmp_path: Path) -> None:
+        path = _write_plugin(tmp_path / "bad.py", "HANDLERS = {}")
+        with pytest.raises(ValueError, match="TOOLS must be a list"):
+            load_plugin(path)
+
+    def test_raises_on_missing_handlers(self, tmp_path: Path) -> None:
+        content = """\
+from mcp.types import Tool
+TOOLS = [Tool(name="x", description="x", inputSchema={"type": "object", "properties": {}, "required": []})]
+"""
+        path = _write_plugin(tmp_path / "bad2.py", content)
+        with pytest.raises(ValueError, match="HANDLERS must be a dict"):
+            load_plugin(path)
+
+    def test_raises_on_name_mismatch(self, tmp_path: Path) -> None:
+        content = """\
+from mcp.types import Tool
+TOOLS = [Tool(name="a", description="a", inputSchema={"type": "object", "properties": {}, "required": []})]
+async def _h(state, args): return {}
+HANDLERS = {"b": _h}
+"""
+        path = _write_plugin(tmp_path / "mismatch.py", content)
+        with pytest.raises(ValueError, match="TOOLS/HANDLERS mismatch"):
+            load_plugin(path)
+
+    def test_unique_module_key(self, tmp_path: Path) -> None:
+        p1 = _write_plugin(tmp_path / "dir1" / "hello.py", VALID_PLUGIN)
+        p2 = _write_plugin(tmp_path / "dir2" / "hello.py", VALID_PLUGIN)
+
+        _, _, _, key1 = load_plugin(p1)
+        _, _, _, key2 = load_plugin(p2)
+
+        assert key1 != key2
+        assert key1.startswith("ble_mcp_plugin__hello__")
+        assert key2.startswith("ble_mcp_plugin__hello__")
+        sys.modules.pop(key1, None)
+        sys.modules.pop(key2, None)
+
+    def test_raises_on_dir_without_init(self, tmp_path: Path) -> None:
+        pkg = tmp_path / "noinit"
+        pkg.mkdir()
+        with pytest.raises(ValueError, match="no __init__.py"):
+            load_plugin(pkg)
+
+    def test_raises_on_syntax_error(self, tmp_path: Path) -> None:
+        path = _write_plugin(tmp_path / "broken.py", "def oops(:\n  pass\n")
+        with pytest.raises(ValueError, match="Error executing plugin"):
+            load_plugin(path)
+
+
+# ---------------------------------------------------------------------------
+# PluginManager
+# ---------------------------------------------------------------------------
+
+
+class TestPluginManager:
+    def _make_manager(self, tmp_path: Path) -> tuple[PluginManager, list[Tool], dict[str, Any]]:
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        tools: list[Tool] = [
+            Tool(name="core.tool", description="core", inputSchema={"type": "object", "properties": {}, "required": []}),
+        ]
+        handlers: dict[str, Any] = {"core.tool": lambda s, a: None}
+        manager = PluginManager(plugins_dir, tools, handlers)
+        return manager, tools, handlers
+
+    def test_load_adds_tools_and_handlers(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+
+        info = manager.load(path)
+
+        assert info.name == "hello"
+        assert "test.hello" in info.tool_names
+        assert any(t.name == "test.hello" for t in tools)
+        assert "test.hello" in handlers
+        assert "hello" in manager.loaded
+
+    def test_load_raises_on_name_collision(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        # Plugin that tries to register "core.tool" which already exists
+        content = """\
+from mcp.types import Tool
+TOOLS = [Tool(name="core.tool", description="collision", inputSchema={"type": "object", "properties": {}, "required": []})]
+async def _h(state, args): return {}
+HANDLERS = {"core.tool": _h}
+"""
+        path = _write_plugin(manager.plugins_dir / "collider.py", content)
+
+        with pytest.raises(ValueError, match="collides with an existing tool"):
+            manager.load(path)
+
+        # Original tool should still be there
+        assert len([t for t in tools if t.name == "core.tool"]) == 1
+
+    def test_load_raises_on_plugin_collision(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+        manager.load(path)
+
+        # Second plugin with same tool name
+        content = """\
+from mcp.types import Tool
+TOOLS = [Tool(name="test.hello", description="dup", inputSchema={"type": "object", "properties": {}, "required": []})]
+async def _h(state, args): return {}
+HANDLERS = {"test.hello": _h}
+"""
+        path2 = _write_plugin(manager.plugins_dir / "dup.py", content)
+        with pytest.raises(ValueError, match="collides with an existing tool"):
+            manager.load(path2)
+
+    def test_unload_removes_tools_and_handlers(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+        info = manager.load(path)
+
+        manager.unload("hello")
+
+        assert not any(t.name == "test.hello" for t in tools)
+        assert "test.hello" not in handlers
+        assert "hello" not in manager.loaded
+        assert info.module_key not in sys.modules
+
+    def test_unload_raises_for_unknown(self, tmp_path: Path) -> None:
+        manager, _, _ = self._make_manager(tmp_path)
+        with pytest.raises(KeyError, match="Plugin not loaded"):
+            manager.unload("nonexistent")
+
+    def test_reload_swaps_tools(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+        manager.load(path)
+
+        # Overwrite with v2
+        path.write_text(VALID_PLUGIN_V2)
+        info = manager.reload("hello")
+
+        assert info.name == "hello"
+        # Should have one test.hello tool with v2 description
+        plugin_tools = [t for t in tools if t.name == "test.hello"]
+        assert len(plugin_tools) == 1
+        assert "v2" in plugin_tools[0].description
+
+    def test_load_all_discovers_and_loads(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        _write_plugin(manager.plugins_dir / "alpha.py", VALID_PLUGIN.replace("test.hello", "test.alpha"))
+        _write_plugin(manager.plugins_dir / "beta.py", MULTI_TOOL_PLUGIN)
+
+        manager.load_all()
+
+        assert "alpha" in manager.loaded
+        assert "beta" in manager.loaded
+        assert "test.alpha" in handlers
+        assert "test.a" in handlers
+        assert "test.b" in handlers
+
+    def test_load_all_logs_errors_continues(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        # One bad, one good
+        _write_plugin(manager.plugins_dir / "bad.py", "# no TOOLS or HANDLERS")
+        _write_plugin(manager.plugins_dir / "good.py", VALID_PLUGIN)
+
+        manager.load_all()
+
+        assert "good" in manager.loaded
+        assert "bad" not in manager.loaded
+
+
+# ---------------------------------------------------------------------------
+# handlers_plugin (list handler)
+# ---------------------------------------------------------------------------
+
+
+class TestPluginListHandler:
+    @pytest.mark.asyncio
+    async def test_returns_loaded_plugins(self, tmp_path: Path) -> None:
+        from ble_mcp_server.handlers_plugin import make_handlers
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        tools: list[Tool] = []
+        handlers: dict[str, Any] = {}
+        manager = PluginManager(plugins_dir, tools, handlers)
+        _write_plugin(plugins_dir / "hello.py", VALID_PLUGIN)
+        manager.load(plugins_dir / "hello.py")
+
+        # Use a dummy server (list handler doesn't use it)
+        plugin_handlers = make_handlers(manager, None)  # type: ignore[arg-type]
+        result = await plugin_handlers["ble.plugin.list"](None, {})
+
+        assert result["ok"] is True
+        assert result["count"] == 1
+        assert result["plugins"][0]["name"] == "hello"
+        assert "test.hello" in result["plugins"][0]["tools"]
+        assert result["plugins_dir"] == str(plugins_dir)
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_none_loaded(self, tmp_path: Path) -> None:
+        from ble_mcp_server.handlers_plugin import make_handlers
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        tools: list[Tool] = []
+        handlers: dict[str, Any] = {}
+        manager = PluginManager(plugins_dir, tools, handlers)
+
+        plugin_handlers = make_handlers(manager, None)  # type: ignore[arg-type]
+        result = await plugin_handlers["ble.plugin.list"](None, {})
+
+        assert result["ok"] is True
+        assert result["count"] == 0
+        assert result["plugins"] == []
+        assert result["plugins_dir"] == str(plugins_dir)

@@ -10,12 +10,14 @@ import sys
 import time
 from typing import Any
 
-from mcp.server import Server
+from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from ble_mcp_server import handlers_ble, handlers_spec, handlers_trace
+from ble_mcp_server import handlers_ble, handlers_plugin, handlers_spec, handlers_trace
 from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _ok, _result_text
+from ble_mcp_server.plugins import PluginManager
+from ble_mcp_server.specs import resolve_spec_root
 from ble_mcp_server.state import BleState
 from ble_mcp_server.trace import get_trace_buffer, init_trace, sanitize_args
 
@@ -35,8 +37,14 @@ logger = logging.getLogger("ble_mcp_server")
 # Tool & handler registry (merged from handler modules)
 # ---------------------------------------------------------------------------
 
-TOOLS: list[Tool] = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS
-_HANDLERS: dict[str, Any] = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
+TOOLS: list[Tool] = (
+    handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
+)
+_HANDLERS: dict[str, Any] = {
+    **handlers_ble.HANDLERS,
+    **handlers_spec.HANDLERS,
+    **handlers_trace.HANDLERS,
+}
 
 # ---------------------------------------------------------------------------
 # Server construction
@@ -46,6 +54,12 @@ _HANDLERS: dict[str, Any] = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS, 
 def build_server() -> tuple[Server, BleState]:
     state = BleState()
     server = Server("ble-mcp-server")
+
+    # --- Plugin system ---
+    plugins_dir = resolve_spec_root() / "plugins"
+    manager = PluginManager(plugins_dir, TOOLS, _HANDLERS)
+    manager.load_all()
+    _HANDLERS.update(handlers_plugin.make_handlers(manager, server))
 
     @server.list_tools()
     async def _list_tools() -> list[Tool]:
@@ -124,7 +138,10 @@ async def _run() -> None:
                 # Windows doesn't support add_signal_handler for SIGTERM
                 pass
 
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+        init_options = server.create_initialization_options(
+            notification_options=NotificationOptions(tools_changed=True),
+        )
+        await server.run(read_stream, write_stream, init_options)
 
     # After server.run returns, clean up BLE connections
     await state.shutdown()

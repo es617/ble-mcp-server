@@ -279,3 +279,39 @@ Return last N trace events (default 50).
 ```
 
 Returns `{ "ok": true, "events": [{ "ts": "...", "event": "tool_call_start", "tool": "ble.read", ... }, ...] }`.
+
+---
+
+## Plugins
+
+Tools for managing user plugins. Plugins live in `.ble_mcp/plugins/` and can add device-specific tools without modifying the core server.
+
+### ble.plugin.list
+
+List loaded plugins with their tool names.
+
+```json
+{}
+```
+
+Returns `{ "ok": true, "plugins": [{ "name": "sensortag", "path": "/path/to/.ble_mcp/plugins/sensortag.py", "tools": ["sensortag.read_temp"] }], "count": 1 }`.
+
+### ble.plugin.reload
+
+Hot-reload a plugin by name. Re-imports the module and refreshes tools.
+
+```json
+{ "name": "sensortag" }
+```
+
+Returns `{ "ok": true, "name": "sensortag", "tools": ["sensortag.read_temp"], "notified": true }`.
+
+### ble.plugin.load
+
+Load a new plugin from a file or directory path.
+
+```json
+{ "path": ".ble_mcp/plugins/sensortag.py" }
+```
+
+Returns `{ "ok": true, "name": "sensortag", "tools": ["sensortag.read_temp"], "notified": true }`.
