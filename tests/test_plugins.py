@@ -126,7 +126,7 @@ class TestDiscoverPlugins:
 class TestLoadPlugin:
     def test_valid_single_file(self, tmp_path: Path) -> None:
         path = _write_plugin(tmp_path / "hello.py", VALID_PLUGIN)
-        name, tools, handlers, module_key = load_plugin(path)
+        name, tools, handlers, module_key, meta = load_plugin(path)
 
         assert name == "hello"
         assert len(tools) == 1
@@ -141,7 +141,7 @@ class TestLoadPlugin:
         pkg.mkdir()
         (pkg / "__init__.py").write_text(VALID_PLUGIN)
 
-        name, tools, handlers, module_key = load_plugin(pkg)
+        name, tools, handlers, module_key, meta = load_plugin(pkg)
         assert name == "mypkg"
         assert len(tools) == 1
         sys.modules.pop(module_key, None)
@@ -175,8 +175,8 @@ HANDLERS = {"b": _h}
         p1 = _write_plugin(tmp_path / "dir1" / "hello.py", VALID_PLUGIN)
         p2 = _write_plugin(tmp_path / "dir2" / "hello.py", VALID_PLUGIN)
 
-        _, _, _, key1 = load_plugin(p1)
-        _, _, _, key2 = load_plugin(p2)
+        _, _, _, key1, _ = load_plugin(p1)
+        _, _, _, key2, _ = load_plugin(p2)
 
         assert key1 != key2
         assert key1.startswith("ble_mcp_plugin__hello__")
@@ -189,6 +189,19 @@ HANDLERS = {"b": _h}
         pkg.mkdir()
         with pytest.raises(ValueError, match="no __init__.py"):
             load_plugin(pkg)
+
+    def test_meta_returned_when_present(self, tmp_path: Path) -> None:
+        content = VALID_PLUGIN + '\nMETA = {"description": "Test plugin", "service_uuids": ["180a"]}\n'
+        path = _write_plugin(tmp_path / "withmeta.py", content)
+        name, tools, handlers, module_key, meta = load_plugin(path)
+        assert meta == {"description": "Test plugin", "service_uuids": ["180a"]}
+        sys.modules.pop(module_key, None)
+
+    def test_meta_defaults_to_empty_dict(self, tmp_path: Path) -> None:
+        path = _write_plugin(tmp_path / "nometa.py", VALID_PLUGIN)
+        name, tools, handlers, module_key, meta = load_plugin(path)
+        assert meta == {}
+        sys.modules.pop(module_key, None)
 
     def test_raises_on_reserved_name(self, tmp_path: Path) -> None:
         path = _write_plugin(tmp_path / "all.py", VALID_PLUGIN)

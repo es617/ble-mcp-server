@@ -284,17 +284,49 @@ Returns `{ "ok": true, "events": [{ "ts": "...", "event": "tool_call_start", "to
 
 ## Plugins
 
-Tools for managing user plugins. Plugins live in `.ble_mcp/plugins/` and can add device-specific tools without modifying the core server.
+Tools for managing user plugins. Plugins live in `.ble_mcp/plugins/` and can add device-specific tools without modifying the core server. Requires `BLE_MCP_PLUGINS` env var to be set.
+
+### ble.plugin.template
+
+Return a Python plugin template. Optionally pre-fill with a device name.
+
+```json
+{ "device_name": "SensorTag" }
+```
+
+Returns `{ "ok": true, "template": "\"\"\"Plugin for SensorTag...", "suggested_path": ".ble_mcp/plugins/sensortag.py" }`.
 
 ### ble.plugin.list
 
-List loaded plugins with their tool names.
+List loaded plugins with their tool names and metadata.
 
 ```json
 {}
 ```
 
-Returns `{ "ok": true, "plugins": [{ "name": "sensortag", "path": "/path/to/.ble_mcp/plugins/sensortag.py", "tools": ["sensortag.read_temp"] }], "count": 1 }`.
+Returns:
+
+```json
+{
+  "ok": true,
+  "plugins": [{
+    "name": "sensortag",
+    "path": "/path/to/.ble_mcp/plugins/sensortag.py",
+    "tools": ["sensortag.read_temp"],
+    "meta": {
+      "description": "SensorTag plugin",
+      "service_uuids": ["f000aa00-0451-4000-b000-000000000000"],
+      "device_name_contains": "SensorTag"
+    }
+  }],
+  "count": 1,
+  "plugins_dir": "/path/to/.ble_mcp/plugins",
+  "enabled": true,
+  "policy": "*"
+}
+```
+
+The `meta` field is plugin-defined (optional). Common keys: `description`, `service_uuids`, `device_name_contains`.
 
 ### ble.plugin.reload
 
@@ -314,4 +346,4 @@ Load a new plugin from a file or directory path.
 { "path": ".ble_mcp/plugins/sensortag.py" }
 ```
 
-Returns `{ "ok": true, "name": "sensortag", "tools": ["sensortag.read_temp"], "notified": true }`.
+Returns `{ "ok": true, "name": "sensortag", "tools": ["sensortag.read_temp"], "notified": true, "hint": "Plugin loaded on the server. The client may need a restart to call the new tools." }`.

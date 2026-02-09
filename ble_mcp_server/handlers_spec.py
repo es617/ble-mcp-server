@@ -64,10 +64,12 @@ TOOLS: list[Tool] = [
         description=(
             "Attach a registered spec to a connection session (in-memory only). "
             "The spec will be available via ble.spec.get for the duration of this connection. "
-            "After attaching, you should offer to: interact with the device directly "
-            "following the spec (read/write characteristics, execute flows), "
-            "write a Python script or CLI tool for this device, or create "
-            "a new MCP server exposing this device's protocol as high-level tools."
+            "After attaching, check ble.plugin.list for a matching plugin, then present "
+            "the user with their options: "
+            "interact with the device using the spec (read/write characteristics, execute flows), "
+            "use plugin shortcut tools if a plugin is loaded, "
+            "extend an existing plugin with new tools, "
+            "or create a new plugin using ble.plugin.template."
         ),
         inputSchema={
             "type": "object",

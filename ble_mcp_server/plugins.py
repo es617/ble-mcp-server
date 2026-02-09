@@ -54,6 +54,7 @@ class PluginInfo:
     path: Path
     tool_names: list[str]
     module_key: str
+    meta: dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
@@ -61,7 +62,7 @@ class PluginInfo:
 # ---------------------------------------------------------------------------
 
 
-def load_plugin(plugin_path: Path) -> tuple[str, list[Tool], dict[str, Any], str]:
+def load_plugin(plugin_path: Path) -> tuple[str, list[Tool], dict[str, Any], str, dict[str, Any]]:
     """Load a single plugin file/package and validate its exports.
 
     Returns ``(name, tools, handlers, module_key)``.
@@ -126,7 +127,11 @@ def load_plugin(plugin_path: Path) -> tuple[str, list[Tool], dict[str, Any], str
             parts.append(f"handlers without tools: {only_handlers}")
         raise ValueError(f"Plugin {name}: TOOLS/HANDLERS mismatch — {', '.join(parts)}")
 
-    return name, tools, handlers, module_key
+    meta = getattr(module, "META", {})
+    if not isinstance(meta, dict):
+        meta = {}
+
+    return name, tools, handlers, module_key, meta
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +211,7 @@ class PluginManager:
         Raises ``PermissionError`` if blocked by policy,
         ``ValueError`` on name collision or validation failure.
         """
-        name, tools, handlers, module_key = load_plugin(plugin_path)
+        name, tools, handlers, module_key, meta = load_plugin(plugin_path)
         try:
             self._check_allowed(name)
         except PermissionError:
@@ -230,6 +235,7 @@ class PluginManager:
             path=plugin_path.resolve(),
             tool_names=[t.name for t in tools],
             module_key=module_key,
+            meta=meta,
         )
         self.loaded[name] = info
         logger.info("Loaded plugin %s with tools: %s", name, info.tool_names)

@@ -14,21 +14,27 @@ Works out of the box with Claude Code and any MCP-compatible runtime. Communicat
 
 ## Why this exists
 
-Most BLE tools are built for humans. This project exposes BLE as a machine-friendly, stateful control plane:
+You have a BLE device. You want an AI agent to talk to it — scan, connect, read sensors, send commands, stream data. This server makes that possible.
 
-- **Stateful sessions** — keep connections and subscriptions open across calls
-- **Buffered notifications** — drain bursts of data (logs/datasets) reliably
-- **Safe by default** — read-only unless explicitly enabled
-- **Agent-friendly** — structured JSON outputs, stable tool surface
+It gives any MCP-compatible agent a full set of BLE tools: scanning, connecting, reading, writing, subscribing to notifications, and managing protocol knowledge. The agent calls these tools, gets structured JSON back, and reasons about what to do next — no human in the loop for each BLE operation.
+
+**What agents can do with it:**
+
+- **Develop and debug** — connect to your device, explore its services, read characteristics, test commands, and diagnose issues conversationally. "Why is this sensor returning zeros?" becomes a question you can ask.
+- **Iterate on new hardware** — building a BLE device? Let the agent test your protocol as you develop it. It remembers the spec, catches regressions, and adapts when things change.
+- **Automate testing** — write plugin tools for your device, then let the agent run test sequences: enable a sensor, collect 100 samples, verify the values, report results.
+- **Explore** — point the agent at a device you've never seen. It discovers services, reads characteristics, probes command sequences, and builds up protocol documentation from scratch.
+- **Build BLE automation** — agents controlling real hardware for real tasks: reading environmental sensors on a schedule, managing a fleet of BLE beacons, triggering actuators based on conditions.
 
 ---
 
 ## Who is this for?
 
-- Embedded / hardware developers testing BLE protocols
-- Labs running automated BLE tests
-- AI agents interacting with real devices
-- CI rigs and hardware-in-the-loop setups
+- **Embedded engineers** — faster iteration on BLE protocols, conversational debugging, automated test sequences
+- **Hobbyists and makers** — explore BLE devices without writing boilerplate; let the agent figure out the protocol
+- **QA and test engineers** — build repeatable BLE test suites with plugin tools, run them from CI or agent sessions
+- **Support and field engineers** — diagnose BLE device issues interactively without specialized tooling
+- **Researchers** — automate data collection from BLE sensors, explore device capabilities systematically
 
 ---
 
@@ -128,14 +134,14 @@ claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 
 ## Tools
 
-See the full [Tools Reference](docs/tools.md) for detailed input/output schemas.
+See [Concepts](docs/concepts.md) for how everything fits together, and the [Tools Reference](docs/tools.md) for detailed input/output schemas.
 
 | Category | Tools |
 |---|---|
 | **BLE Core** | `ble.scan_start`, `ble.scan_get_results`, `ble.scan_stop`, `ble.connect`, `ble.disconnect`, `ble.connection_status`, `ble.discover`, `ble.mtu`, `ble.read`, `ble.write`, `ble.read_descriptor`, `ble.write_descriptor`, `ble.subscribe`, `ble.unsubscribe`, `ble.wait_notification`, `ble.poll_notifications`, `ble.drain_notifications` |
 | **Protocol Specs** | `ble.spec.template`, `ble.spec.register`, `ble.spec.list`, `ble.spec.attach`, `ble.spec.get`, `ble.spec.read`, `ble.spec.search` |
 | **Tracing** | `ble.trace.status`, `ble.trace.tail` |
-| **Plugins** | `ble.plugin.list`, `ble.plugin.reload`, `ble.plugin.load` |
+| **Plugins** | `ble.plugin.template`, `ble.plugin.list`, `ble.plugin.reload`, `ble.plugin.load` |
 
 ---
 
@@ -181,39 +187,24 @@ Handler signature: `async def handler(state: BleState, args: dict) -> dict`
 
 Every key in `HANDLERS` must have a matching `Tool` in `TOOLS` (by name), and vice versa.
 
-### Quick start
-
-1. Create `.ble_mcp/plugins/hello.py`:
+Plugins can optionally export a `META` dict with matching hints so the agent can determine which plugin fits a connected device:
 
 ```python
-from mcp.types import Tool
-from ble_mcp_server.helpers import _ok
-
-TOOLS = [
-    Tool(
-        name="hello.greet",
-        description="Say hello",
-        inputSchema={"type": "object", "properties": {}, "required": []},
-    ),
-]
-
-async def handle_greet(state, args):
-    return _ok(message="Hello from plugin!")
-
-HANDLERS = {"hello.greet": handle_greet}
+META = {
+    "description": "Silicon Labs DFU over BLE",
+    "service_uuids": ["1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0"],
+    "device_name_contains": "DFU",
+}
 ```
 
-2. Enable plugins and restart the server:
+### Quick start
 
-```bash
-claude mcp add ble -e BLE_MCP_PLUGINS=all -- ble_mcp
-# Or allow only specific plugins:
-claude mcp add ble -e BLE_MCP_PLUGINS=hello -- ble_mcp
-```
+1. Use `ble.plugin.template` to generate a skeleton, or create `.ble_mcp/plugins/my_device.py` manually
+2. Enable plugins: `claude mcp add ble -e BLE_MCP_PLUGINS=all -- ble_mcp`
 3. Restart Claude Code so it picks up the new tools
-4. Hot-reload after edits: call `ble.plugin.reload` with the plugin name — no restart needed
+4. Hot-reload after edits: call `ble.plugin.reload` — no restart needed
 
-> **Note:** Plugins in `.ble_mcp/plugins/` are loaded when the MCP server starts. If you add a new plugin file, restart the server for it to appear. Editing an already-loaded plugin only requires `ble.plugin.reload` — the server stays running.
+> **Note:** Plugins are loaded when the MCP server starts. New plugin files require a restart. Editing an already-loaded plugin only requires `ble.plugin.reload`.
 
 ---
 
@@ -260,6 +251,21 @@ sudo usermod -aG bluetooth $USER
 ```
 
 If you are running in a container or headless environment, ensure `dbus` and `bluetoothd` are running.
+
+---
+
+## Full example: scan → connect → spec → plugin
+
+Here's how everything fits together in a typical session:
+
+1. **Scan** for nearby devices: `ble.scan_start` → `ble.scan_get_results` → `ble.scan_stop`
+2. **Connect** to a device: `ble.connect` with the device address
+3. **Check for a protocol spec**: `ble.spec.list` — if a spec matches the device, attach it with `ble.spec.attach`
+4. **Check for a plugin**: `ble.plugin.list` — if a plugin matches (by name or `META` hints like `service_uuids`), its tools are ready to use
+5. **Interact**: use plugin shortcut tools, follow the spec with raw BLE tools, or both
+6. **Iterate**: edit a plugin and hot-reload with `ble.plugin.reload`, or create a new one with `ble.plugin.template`
+
+The agent handles steps 2–5 automatically after you tell it which device to connect to.
 
 ---
 

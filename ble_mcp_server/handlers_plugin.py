@@ -12,9 +12,65 @@ from typing import Any
 from mcp.server import Server
 from mcp.types import Tool
 
+import re
+
 from ble_mcp_server.helpers import _err, _ok
 from ble_mcp_server.plugins import PluginManager
 from ble_mcp_server.state import BleState
+
+
+def _plugin_template(device_name: str | None = None) -> str:
+    name = device_name or "my_device"
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return f'''"""Plugin for {name}."""
+
+from mcp.types import Tool
+
+from ble_mcp_server.helpers import _ok, _err
+from ble_mcp_server.state import BleState
+
+# Optional metadata — helps the agent match this plugin to a device.
+# All fields are optional. Use what makes sense for your device.
+META = {{
+    "description": "{name} plugin",
+    # "device_name_contains": "{name}",
+    # "service_uuids": ["0000180a-0000-1000-8000-00805f9b34fb"],
+}}
+
+TOOLS = [
+    Tool(
+        name="{slug}.example",
+        description="Example tool — replace with real functionality.",
+        inputSchema={{
+            "type": "object",
+            "properties": {{
+                "connection_id": {{"type": "string"}},
+            }},
+            "required": ["connection_id"],
+        }},
+    ),
+]
+
+
+async def handle_example(state: BleState, args: dict) -> dict:
+    connection_id = args["connection_id"]
+    entry = state.require_connected(connection_id)
+    # Use entry.client (BleakClient) to interact with the device:
+    #   value = await entry.client.read_gatt_char("char-uuid")
+    #   await entry.client.write_gatt_char("char-uuid", bytes([0x01]))
+    return _ok(message="Hello from {slug} plugin!")
+
+
+HANDLERS = {{
+    "{slug}.example": handle_example,
+}}
+'''
+
+
+def _suggest_plugin_path(plugins_dir: Path, device_name: str | None = None) -> Path:
+    name = device_name or "my_device"
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    return plugins_dir / f"{slug}.py"
 
 # ---------------------------------------------------------------------------
 # Tool definitions
@@ -24,7 +80,10 @@ TOOLS: list[Tool] = [
     Tool(
         name="ble.plugin.list",
         description=(
-            "List loaded plugins with their tool names. "
+            "List loaded plugins with their tool names and metadata. "
+            "Each plugin may include a 'meta' dict with matching hints like "
+            "service_uuids, device_name_contains, or description — use these to determine "
+            "which plugin fits the connected device. "
             "Also returns whether plugins are enabled and the current policy. "
             "Plugins require BLE_MCP_PLUGINS env var — set to 'all' for all or 'name1,name2' to allow specific plugins. "
             "If disabled, tell the user to set this variable when adding the MCP server."
@@ -50,6 +109,25 @@ TOOLS: list[Tool] = [
                 },
             },
             "required": ["name"],
+        },
+    ),
+    Tool(
+        name="ble.plugin.template",
+        description=(
+            "Return a Python plugin template. Use this when creating a new plugin. "
+            "Optionally pre-fill with a device name. Save the result to "
+            ".ble_mcp/plugins/<name>.py, fill in the tools and handlers, "
+            "then load with ble.plugin.load."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "device_name": {
+                    "type": "string",
+                    "description": "Device name to pre-fill in the template.",
+                },
+            },
+            "required": [],
         },
     ),
     Tool(
@@ -79,9 +157,15 @@ TOOLS: list[Tool] = [
 def make_handlers(manager: PluginManager, server: Server) -> dict[str, Any]:
     """Return handler closures that capture *manager* and *server*."""
 
+    async def handle_plugin_template(_state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+        device_name = args.get("device_name")
+        template = _plugin_template(device_name)
+        suggested_path = _suggest_plugin_path(manager.plugins_dir, device_name)
+        return _ok(template=template, suggested_path=str(suggested_path))
+
     async def handle_plugin_list(_state: BleState, _args: dict[str, Any]) -> dict[str, Any]:
         plugins = [
-            {"name": info.name, "path": str(info.path), "tools": info.tool_names}
+            {"name": info.name, "path": str(info.path), "tools": info.tool_names, "meta": info.meta}
             for info in manager.loaded.values()
         ]
         return _ok(
@@ -144,6 +228,7 @@ def make_handlers(manager: PluginManager, server: Server) -> dict[str, Any]:
         )
 
     return {
+        "ble.plugin.template": handle_plugin_template,
         "ble.plugin.list": handle_plugin_list,
         "ble.plugin.reload": handle_plugin_reload,
         "ble.plugin.load": handle_plugin_load,

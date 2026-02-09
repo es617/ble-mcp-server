@@ -81,10 +81,12 @@ TOOLS: list[Tool] = [
         description=(
             "Connect to a BLE peripheral by address. Returns a connection_id, "
             "device identity (device_name, service_uuids from scan cache), and "
-            "spec status (null if none attached). After connecting, use ble.spec.list "
-            "to check for a matching protocol spec by device name or service UUIDs. "
-            "If a match is found, attach it with ble.spec.attach. If no match, ask "
-            "the user if they have a protocol spec for this device."
+            "spec status (null if none attached). After connecting: "
+            "1) Use ble.spec.list to check for a matching protocol spec by device name "
+            "or service UUIDs. If a match is found, attach it with ble.spec.attach. "
+            "If no match, ask the user if they have a protocol spec for this device. "
+            "2) Use ble.plugin.list to check for a plugin whose name matches the device. "
+            "If a matching plugin is loaded, its tools are available to use directly."
         ),
         inputSchema={
             "type": "object",
