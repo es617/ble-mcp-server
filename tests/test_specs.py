@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -17,6 +18,7 @@ from ble_mcp_server.specs import (
     search_spec,
     validate_spec_meta,
 )
+from ble_mcp_server.state import BleState, ConnectionEntry
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -371,3 +373,217 @@ class TestComputeSpecId:
         p1.touch()
         p2.touch()
         assert compute_spec_id(p1) != compute_spec_id(p2)
+
+
+# ---------------------------------------------------------------------------
+# Spec handler tests
+# ---------------------------------------------------------------------------
+
+
+class TestSpecHandlers:
+    """Tests for handler functions in ble_mcp_server.handlers_spec."""
+
+    async def test_template_returns_template_and_path(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_template
+
+        state = BleState()
+        result = await handle_spec_template(state, {})
+        assert result["ok"] is True
+        assert "kind: ble-protocol" in result["template"]
+        assert "suggested_path" in result
+
+    async def test_template_with_device_name(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_template
+
+        state = BleState()
+        result = await handle_spec_template(state, {"device_name": "SensorTag"})
+        assert result["ok"] is True
+        assert "SensorTag" in result["template"]
+        assert "sensortag" in result["suggested_path"]
+
+    async def test_register_success(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_register
+
+        spec_file = _write_spec(tmp_path, VALID_SPEC)
+        state = BleState()
+        result = await handle_spec_register(state, {"path": str(spec_file)})
+        assert result["ok"] is True
+        assert result["name"] == "Test Device"
+        assert result["spec_id"]
+
+    async def test_register_file_not_found(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_register
+
+        state = BleState()
+        result = await handle_spec_register(state, {"path": str(tmp_path / "nope.md")})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "not_found"
+
+    async def test_register_invalid_frontmatter(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_register
+
+        bad_spec = "---\nkind: wrong\n---\n# Bad\n"
+        spec_file = _write_spec(tmp_path, bad_spec)
+        state = BleState()
+        result = await handle_spec_register(state, {"path": str(spec_file)})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_spec"
+
+    async def test_list_empty(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_list
+
+        state = BleState()
+        result = await handle_spec_list(state, {})
+        assert result["ok"] is True
+        assert result["count"] == 0
+        assert result["specs"] == []
+
+    async def test_list_with_registered(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_list
+
+        spec_file = _write_spec(tmp_path, VALID_SPEC)
+        register_spec(spec_file)
+
+        state = BleState()
+        result = await handle_spec_list(state, {})
+        assert result["ok"] is True
+        assert result["count"] == 1
+
+    async def test_attach_success(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_attach
+
+        spec_file = _write_spec(tmp_path, VALID_SPEC)
+        entry_data = register_spec(spec_file)
+
+        state = BleState()
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        conn = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        state.connections["c1"] = conn
+
+        result = await handle_spec_attach(state, {
+            "connection_id": "c1",
+            "spec_id": entry_data["spec_id"],
+        })
+        assert result["ok"] is True
+        assert result["spec_id"] == entry_data["spec_id"]
+        assert conn.spec is not None
+        assert conn.spec["spec_id"] == entry_data["spec_id"]
+
+    async def test_attach_unknown_spec_id(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_attach
+
+        state = BleState()
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        conn = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        state.connections["c1"] = conn
+
+        result = await handle_spec_attach(state, {
+            "connection_id": "c1",
+            "spec_id": "nonexistent",
+        })
+        assert result["ok"] is False
+        assert result["error"]["code"] == "not_found"
+
+    async def test_attach_unknown_connection_id(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_attach
+
+        state = BleState()
+        with pytest.raises(KeyError, match="Unknown connection_id"):
+            await handle_spec_attach(state, {
+                "connection_id": "nope",
+                "spec_id": "anything",
+            })
+
+    async def test_get_returns_attached_spec(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_get
+
+        state = BleState()
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        conn = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        conn.spec = {"spec_id": "test123", "path": "/tmp/test.md", "meta": {}}
+        state.connections["c1"] = conn
+
+        result = await handle_spec_get(state, {"connection_id": "c1"})
+        assert result["ok"] is True
+        assert result["spec"]["spec_id"] == "test123"
+
+    async def test_get_returns_none_when_no_spec(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_get
+
+        state = BleState()
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        conn = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        state.connections["c1"] = conn
+
+        result = await handle_spec_get(state, {"connection_id": "c1"})
+        assert result["ok"] is True
+        assert result["spec"] is None
+
+    async def test_read_success(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_read
+
+        spec_file = _write_spec(tmp_path, VALID_SPEC)
+        entry_data = register_spec(spec_file)
+
+        state = BleState()
+        result = await handle_spec_read(state, {"spec_id": entry_data["spec_id"]})
+        assert result["ok"] is True
+        assert result["spec_id"] == entry_data["spec_id"]
+        assert "# Test Device Protocol" in result["content"]
+
+    async def test_read_unknown_spec_id(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_read
+
+        state = BleState()
+        result = await handle_spec_read(state, {"spec_id": "nonexistent"})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "not_found"
+
+    async def test_search_returns_matches(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_search
+
+        spec_file = _write_spec(tmp_path, VALID_SPEC)
+        entry_data = register_spec(spec_file)
+
+        state = BleState()
+        result = await handle_spec_search(state, {
+            "spec_id": entry_data["spec_id"],
+            "query": "sensor",
+        })
+        assert result["ok"] is True
+        assert result["count"] > 0
+        assert len(result["results"]) > 0
+
+    async def test_search_no_matches(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        from ble_mcp_server.handlers_spec import handle_spec_search
+
+        spec_file = _write_spec(tmp_path, VALID_SPEC)
+        entry_data = register_spec(spec_file)
+
+        state = BleState()
+        result = await handle_spec_search(state, {
+            "spec_id": entry_data["spec_id"],
+            "query": "zzzznonexistent",
+        })
+        assert result["ok"] is True
+        assert result["count"] == 0

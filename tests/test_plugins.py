@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -519,3 +520,146 @@ class TestPluginManagerPolicy:
     def test_policy_property_names(self, tmp_path: Path) -> None:
         manager, _, _ = self._make_manager(tmp_path, enabled=True, allowlist={"b", "a"})
         assert manager.policy == "a,b"
+
+
+# ---------------------------------------------------------------------------
+# Plugin handler tests (template, reload, load)
+# ---------------------------------------------------------------------------
+
+
+class TestPluginHandlers:
+    """Tests for handler functions in ble_mcp_server.handlers_plugin."""
+
+    def _setup(self, tmp_path: Path) -> tuple[Any, dict[str, Any]]:
+        """Create a PluginManager with make_handlers. Returns (plugin_handlers, manager)."""
+        from ble_mcp_server.handlers_plugin import make_handlers
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        tools: list[Tool] = []
+        handlers: dict[str, Any] = {}
+        manager = PluginManager(plugins_dir, tools, handlers, enabled=True)
+
+        mock_server = MagicMock()
+        mock_server.request_context.session.send_tool_list_changed = AsyncMock()
+
+        plugin_handlers = make_handlers(manager, mock_server)
+        return plugin_handlers, manager
+
+    @pytest.mark.asyncio
+    async def test_template_returns_template_and_path(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        result = await plugin_handlers["ble.plugin.template"](None, {})
+        assert result["ok"] is True
+        assert "TOOLS" in result["template"]
+        assert "HANDLERS" in result["template"]
+        assert "suggested_path" in result
+
+    @pytest.mark.asyncio
+    async def test_template_with_device_name(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        result = await plugin_handlers["ble.plugin.template"](None, {"device_name": "SensorTag"})
+        assert result["ok"] is True
+        assert "SensorTag" in result["template"] or "sensortag" in result["template"]
+        assert "sensortag" in result["suggested_path"]
+
+    @pytest.mark.asyncio
+    async def test_reload_success(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        # Load a plugin first
+        path = _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+        manager.load(path)
+
+        result = await plugin_handlers["ble.plugin.reload"](None, {"name": "hello"})
+        assert result["ok"] is True
+        assert result["name"] == "hello"
+        assert "test.hello" in result["tools"]
+
+    @pytest.mark.asyncio
+    async def test_reload_unknown_plugin(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        result = await plugin_handlers["ble.plugin.reload"](None, {"name": "nope"})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "not_found"
+
+    @pytest.mark.asyncio
+    async def test_reload_missing_name(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        result = await plugin_handlers["ble.plugin.reload"](None, {"name": ""})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_params"
+
+    @pytest.mark.asyncio
+    async def test_load_success(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        _write_plugin(manager.plugins_dir / "hello.py", VALID_PLUGIN)
+
+        result = await plugin_handlers["ble.plugin.load"](
+            None, {"path": str(manager.plugins_dir / "hello.py")}
+        )
+        assert result["ok"] is True
+        assert result["name"] == "hello"
+        assert "test.hello" in result["tools"]
+
+    @pytest.mark.asyncio
+    async def test_load_empty_path(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        result = await plugin_handlers["ble.plugin.load"](None, {"path": ""})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "invalid_params"
+
+    @pytest.mark.asyncio
+    async def test_load_path_traversal_blocked(self, tmp_path: Path) -> None:
+        plugin_handlers, manager = self._setup(tmp_path)
+
+        # Write plugin outside plugins dir
+        _write_plugin(tmp_path / "elsewhere" / "evil.py", VALID_PLUGIN)
+        traversal = str(manager.plugins_dir / ".." / "elsewhere" / "evil.py")
+
+        result = await plugin_handlers["ble.plugin.load"](None, {"path": traversal})
+        assert result["ok"] is False
+        assert result["error"]["code"] == "plugin_error"
+
+    @pytest.mark.asyncio
+    async def test_list_when_plugins_disabled(self, tmp_path: Path) -> None:
+        from ble_mcp_server.handlers_plugin import make_handlers
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        tools: list[Tool] = []
+        handlers: dict[str, Any] = {}
+        manager = PluginManager(plugins_dir, tools, handlers, enabled=False)
+
+        plugin_handlers = make_handlers(manager, None)  # type: ignore[arg-type]
+        result = await plugin_handlers["ble.plugin.list"](None, {})
+
+        assert result["ok"] is True
+        assert result["enabled"] is False
+        assert result["policy"] == "disabled"
+        assert result["count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_list_shows_policy_with_allowlist(self, tmp_path: Path) -> None:
+        from ble_mcp_server.handlers_plugin import make_handlers
+
+        plugins_dir = tmp_path / "plugins"
+        plugins_dir.mkdir()
+        tools: list[Tool] = []
+        handlers: dict[str, Any] = {}
+        manager = PluginManager(
+            plugins_dir, tools, handlers, enabled=True, allowlist={"alpha", "beta"},
+        )
+
+        plugin_handlers = make_handlers(manager, None)  # type: ignore[arg-type]
+        result = await plugin_handlers["ble.plugin.list"](None, {})
+
+        assert result["ok"] is True
+        assert result["enabled"] is True
+        assert result["policy"] == "alpha,beta"

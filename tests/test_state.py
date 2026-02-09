@@ -1,6 +1,10 @@
 """Unit tests for pure-python helpers in ble_mcp_server.state."""
 
-from ble_mcp_server.state import check_allowlist, normalize_uuid
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from ble_mcp_server.state import BleState, ConnectionEntry, Subscription, check_allowlist, normalize_uuid
 
 
 # ---------------------------------------------------------------------------
@@ -61,3 +65,61 @@ class TestCheckAllowlist:
         allowlist = {full}
         assert check_allowlist(full, allowlist) is True
         assert check_allowlist("12345678-1234-1234-1234-123456789ABC", allowlist) is True
+
+
+# ---------------------------------------------------------------------------
+# Notification queue overflow
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationQueueOverflow:
+    """Exercise the _callback overflow path in add_subscription."""
+
+    async def test_overflow_increments_dropped_and_keeps_latest(self):
+        state = BleState()
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        mock_client.start_notify = AsyncMock()
+        mock_client.stop_notify = AsyncMock()
+        entry = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        state.connections["c1"] = entry
+
+        sub = await state.add_subscription(entry, "00002a00-0000-1000-8000-00805f9b34fb")
+
+        # Capture the callback that was passed to start_notify
+        callback = mock_client.start_notify.call_args[0][1]
+
+        # Fill the queue to capacity (256)
+        for i in range(256):
+            callback(None, bytearray([i & 0xFF]))
+
+        assert sub.queue.full()
+        assert sub.dropped == 0
+
+        # One more triggers overflow — drops oldest, increments counter
+        callback(None, bytearray([0xFF]))
+        assert sub.dropped == 1
+        assert sub.queue.qsize() == 256
+
+        # The latest value should be at the tail
+        # Drain all and check the last one
+        last = None
+        while not sub.queue.empty():
+            last = sub.queue.get_nowait()
+        assert last["value_hex"] == "ff"
+
+    async def test_inactive_subscription_ignores_callback(self):
+        state = BleState()
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        mock_client.start_notify = AsyncMock()
+        entry = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        state.connections["c1"] = entry
+
+        sub = await state.add_subscription(entry, "00002a00-0000-1000-8000-00805f9b34fb")
+        callback = mock_client.start_notify.call_args[0][1]
+
+        sub.active = False
+        callback(None, bytearray([0x01]))
+
+        assert sub.queue.empty()
