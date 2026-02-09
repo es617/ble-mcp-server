@@ -34,3 +34,10 @@ Initial release.
 - `ble.plugin.template` for generating plugin skeletons
 - `ble.plugin.list` with metadata, `ble.plugin.load`, `ble.plugin.reload`
 - Hot-reload without server restart
+
+### Security
+- Plugin path containment: `ble.plugin.load` rejects paths outside `.ble_mcp/plugins/`
+- Spec path containment: `ble.spec.register` rejects paths outside the project directory
+- Trace file always writes to `.ble_mcp/traces/trace.jsonl` (no configurable path)
+- Symlink check on trace file path
+- Input validation for base64/hex write payloads (no unhandled exceptions)

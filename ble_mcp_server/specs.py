@@ -167,6 +167,13 @@ def compute_spec_id(path: Path) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _project_root() -> Path:
+    """Return the project root (parent of ``.ble_mcp/``)."""
+    spec_root = resolve_spec_root()
+    # spec_root is .ble_mcp/, project root is its parent
+    return spec_root.resolve().parent
+
+
 def register_spec(path: str | Path) -> dict[str, Any]:
     """Register a spec file in the index.
 
@@ -174,9 +181,17 @@ def register_spec(path: str | Path) -> dict[str, Any]:
     Returns the indexed metadata dict.
 
     Raises ``FileNotFoundError`` if the file doesn't exist.
-    Raises ``ValueError`` if the front-matter is invalid.
+    Raises ``ValueError`` if the path is outside the project or front-matter is invalid.
     """
     file_path = Path(path).resolve()
+
+    project = _project_root()
+    if project not in file_path.parents and file_path != project:
+        raise ValueError(
+            f"Spec path must be inside the project directory ({project}) — "
+            f"got {path}"
+        )
+
     if not file_path.exists():
         raise FileNotFoundError(f"Spec file not found: {file_path}")
 

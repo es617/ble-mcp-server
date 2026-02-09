@@ -209,8 +209,16 @@ class PluginManager:
         """Load a plugin and register its tools/handlers.
 
         Raises ``PermissionError`` if blocked by policy,
-        ``ValueError`` on name collision or validation failure.
+        ``ValueError`` on path traversal, name collision, or validation failure.
         """
+        resolved = plugin_path.resolve()
+        plugins_root = self.plugins_dir.resolve()
+        if plugins_root not in resolved.parents and resolved != plugins_root:
+            raise ValueError(
+                f"Plugin path must be inside {self.plugins_dir}/ — "
+                f"got {plugin_path}"
+            )
+
         name, tools, handlers, module_key, meta = load_plugin(plugin_path)
         try:
             self._check_allowed(name)

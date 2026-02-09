@@ -55,6 +55,11 @@ Plugins follow the same pattern:
 
 The agent cannot bypass these flags. It can only use the tools the server exposes, and the server enforces the policy.
 
+Path containment is enforced for all filesystem operations:
+- **Plugins** must be inside `.ble_mcp/plugins/`
+- **Specs** must be inside the project directory (parent of `.ble_mcp/`)
+- **Traces** always write to `.ble_mcp/traces/trace.jsonl` (not configurable)
+
 ---
 
 ## Protocol specs — teaching the agent about your device

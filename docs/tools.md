@@ -204,7 +204,7 @@ Returns `{ "ok": true, "template": "---\nkind: ble-protocol\n...", "suggested_pa
 
 ### ble.spec.register
 
-Register a spec file in the index. Validates YAML front-matter (requires `kind: ble-protocol` and `name`).
+Register a spec file in the index. Validates YAML front-matter (requires `kind: ble-protocol` and `name`). The path must be inside the project directory (where `.ble_mcp/` lives).
 
 ```json
 { "path": ".ble_mcp/specs/mydevice.md" }
@@ -340,7 +340,7 @@ Returns `{ "ok": true, "name": "sensortag", "tools": ["sensortag.read_temp"], "n
 
 ### ble.plugin.load
 
-Load a new plugin from a file or directory path.
+Load a new plugin from a file or directory path. The path must be inside `.ble_mcp/plugins/`.
 
 ```json
 { "path": ".ble_mcp/plugins/sensortag.py" }

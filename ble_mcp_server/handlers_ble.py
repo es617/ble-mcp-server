@@ -14,6 +14,28 @@ from ble_mcp_server.state import BleState, check_allowlist, normalize_uuid
 
 logger = logging.getLogger("ble_mcp_server")
 
+
+def _decode_value(args: dict[str, Any]) -> bytes | dict[str, Any]:
+    """Decode ``value_b64`` or ``value_hex`` from *args*.
+
+    Returns raw bytes on success, or an error dict on failure.
+    """
+    value_b64 = args.get("value_b64")
+    value_hex = args.get("value_hex")
+    if value_b64:
+        try:
+            return base64.b64decode(value_b64)
+        except Exception:
+            return _err("invalid_value", "value_b64 is not valid base64.")
+    elif value_hex:
+        try:
+            return bytes.fromhex(value_hex)
+        except ValueError:
+            return _err("invalid_value", "value_hex is not valid hex.")
+    else:
+        return _err("missing_value", "Provide value_b64 or value_hex.")
+
+
 # ---------------------------------------------------------------------------
 # Tool definitions
 # ---------------------------------------------------------------------------
@@ -493,14 +515,10 @@ async def handle_write(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     cid = args["connection_id"]
     entry = state.require_connected(cid)
 
-    value_b64 = args.get("value_b64")
-    value_hex = args.get("value_hex")
-    if value_b64:
-        data = base64.b64decode(value_b64)
-    elif value_hex:
-        data = bytes.fromhex(value_hex)
-    else:
-        return _err("missing_value", "Provide value_b64 or value_hex.")
+    result = _decode_value(args)
+    if isinstance(result, dict):
+        return result
+    data = result
 
     with_response = args.get("with_response", True)
     await _retry(lambda: entry.client.write_gatt_char(char_uuid, data, response=with_response))
@@ -526,14 +544,10 @@ async def handle_write_descriptor(state: BleState, args: dict[str, Any]) -> dict
     cid = args["connection_id"]
     handle = int(args["handle"])
     entry = state.require_connected(cid)
-    value_b64 = args.get("value_b64")
-    value_hex = args.get("value_hex")
-    if value_b64:
-        data = base64.b64decode(value_b64)
-    elif value_hex:
-        data = bytes.fromhex(value_hex)
-    else:
-        return _err("missing_value", "Provide value_b64 or value_hex.")
+    result = _decode_value(args)
+    if isinstance(result, dict):
+        return result
+    data = result
     await _retry(lambda: entry.client.write_gatt_descriptor(handle, data))
     return _ok()
 

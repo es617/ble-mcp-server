@@ -11,6 +11,7 @@ import copy
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -56,6 +57,10 @@ class TraceBuffer:
         self._file_path = file_path
         self._fh = None
         if file_path:
+            p = Path(file_path)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            if p.is_symlink():
+                raise ValueError(f"Trace path is a symlink (refusing to follow): {file_path}")
             self._fh = open(file_path, "a", encoding="utf-8")  # noqa: SIM115
 
     def emit(self, event: dict[str, Any]) -> None:
@@ -100,11 +105,8 @@ def init_trace() -> TraceBuffer | None:
     global _buffer
     if not TRACE_ENABLED:
         return None
-    path = os.environ.get("BLE_MCP_TRACE_PATH")
-    if not path:
-        from ble_mcp_server.specs import resolve_spec_root
+    from ble_mcp_server.specs import resolve_spec_root
 
-        path = str(resolve_spec_root() / "traces" / "trace.jsonl")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    path = str(resolve_spec_root() / "traces" / "trace.jsonl")
     _buffer = TraceBuffer(file_path=path)
     return _buffer

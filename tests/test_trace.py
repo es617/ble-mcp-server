@@ -55,6 +55,14 @@ class TestTraceBuffer:
         assert events[0]["data"] == 5
         assert events[4]["data"] == 9
 
+    def test_rejects_symlink_path(self, tmp_path: Path):
+        real_file = tmp_path / "real.jsonl"
+        real_file.touch()
+        link = tmp_path / "link.jsonl"
+        link.symlink_to(real_file)
+        with pytest.raises(ValueError, match="symlink"):
+            TraceBuffer(file_path=str(link))
+
     def test_file_sink(self, tmp_path: Path):
         trace_file = tmp_path / "trace.jsonl"
         buf = TraceBuffer(file_path=str(trace_file))
@@ -138,13 +146,14 @@ class TestInitTrace:
     def test_creates_buffer_when_enabled(self, monkeypatch, tmp_path: Path):
         monkeypatch.setattr("ble_mcp_server.trace.TRACE_ENABLED", True)
         monkeypatch.setattr("ble_mcp_server.trace._buffer", None)
-        trace_file = tmp_path / "traces" / "trace.jsonl"
-        monkeypatch.setenv("BLE_MCP_TRACE_PATH", str(trace_file))
+        spec_root = tmp_path / ".ble_mcp"
+        monkeypatch.setenv("BLE_MCP_SPEC_ROOT", str(spec_root))
         from ble_mcp_server.trace import get_trace_buffer, init_trace
 
         buf = init_trace()
         assert buf is not None
         assert buf is get_trace_buffer()
+        trace_file = spec_root / "traces" / "trace.jsonl"
         assert trace_file.parent.is_dir()
         buf.close()
         # Reset global

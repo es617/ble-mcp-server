@@ -93,7 +93,7 @@ def build_server() -> tuple[Server, BleState]:
             result = _err("timeout", "BLE operation timed out.")
         except Exception as exc:
             logger.error("Unhandled error in %s: %s", name, exc, exc_info=True)
-            result = _err("internal", str(exc))
+            result = _err("internal", f"Internal error in {name}. Check server logs for details.")
 
         if buf:
             duration_ms = round((time.monotonic() - t0) * 1000, 1)

@@ -322,6 +322,26 @@ HANDLERS = {"test.hello": _h}
         assert "test.a" in handlers
         assert "test.b" in handlers
 
+    def test_load_rejects_path_outside_plugins_dir(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        # Write a valid plugin *outside* the plugins dir
+        outside = _write_plugin(tmp_path / "elsewhere" / "evil.py", VALID_PLUGIN)
+
+        with pytest.raises(ValueError, match="must be inside"):
+            manager.load(outside)
+
+        assert "evil" not in manager.loaded
+        assert not any(t.name == "test.hello" for t in tools)
+
+    def test_load_rejects_traversal_path(self, tmp_path: Path) -> None:
+        manager, tools, handlers = self._make_manager(tmp_path)
+        # Write a valid plugin inside plugins dir but reference via traversal
+        _write_plugin(tmp_path / "elsewhere" / "sneaky.py", VALID_PLUGIN)
+        traversal_path = manager.plugins_dir / ".." / "elsewhere" / "sneaky.py"
+
+        with pytest.raises(ValueError, match="must be inside"):
+            manager.load(traversal_path)
+
     def test_load_all_logs_errors_continues(self, tmp_path: Path) -> None:
         manager, tools, handlers = self._make_manager(tmp_path)
         # One bad, one good

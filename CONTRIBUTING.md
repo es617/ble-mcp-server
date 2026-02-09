@@ -84,6 +84,8 @@ Tool names follow the convention `ble.<category>.<action>` (e.g., `ble.spec.read
 
 ## Plugin system internals
 
+**Path containment:** `PluginManager.load()` resolves the path and verifies it is inside `plugins_dir` before loading. Paths outside `.ble_mcp/plugins/` are rejected with `ValueError`.
+
 **Loading:** `load_plugin()` uses `importlib` to load a `.py` file or package `__init__.py`. It validates `TOOLS`, `HANDLERS`, and optional `META` exports, and registers the module in `sys.modules` with a unique key (`ble_mcp_plugin__{name}__{hash}`).
 
 **Name collisions:** If a plugin tool name collides with any existing tool (core or other plugin), loading fails with `ValueError`.

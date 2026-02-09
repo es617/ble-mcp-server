@@ -126,7 +126,6 @@ claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 | `BLE_MCP_PLUGINS` | disabled | Plugin policy: `all` to allow all, or `name1,name2` to allow specific plugins. Unset = disabled. |
 | `BLE_MCP_LOG_LEVEL` | `WARNING` | Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). Logs go to stderr. |
 | `BLE_MCP_TRACE` | enabled | JSONL tracing of every tool call. Set to `0`, `false`, or `no` to disable. |
-| `BLE_MCP_TRACE_PATH` | `.ble_mcp/traces/trace.jsonl` | Path to the JSONL trace file. |
 | `BLE_MCP_TRACE_PAYLOADS` | disabled | Include `value_b64`/`value_hex` in traced args (stripped by default). |
 | `BLE_MCP_TRACE_MAX_BYTES` | `16384` | Max payload chars before truncation (only applies when `TRACE_PAYLOADS` is on). |
 
@@ -210,7 +209,7 @@ META = {
 
 ## Tracing
 
-Every tool call is traced to a JSONL file and an in-memory ring buffer (last 2000 events). Tracing is **on by default** — set `BLE_MCP_TRACE=0` to disable.
+Every tool call is traced to `.ble_mcp/traces/trace.jsonl` and an in-memory ring buffer (last 2000 events). Tracing is **on by default** — set `BLE_MCP_TRACE=0` to disable.
 
 ### Event format
 
@@ -276,6 +275,20 @@ The agent handles steps 2–5 automatically after you tell it which device to co
 - **Safe by default** — writes gated by env flags + allowlist
 - **Agent-friendly** — structured outputs, buffered notifications
 - **Graceful shutdown** — disconnects all clients on exit
+
+---
+
+## Safety
+
+This server connects an AI agent to real hardware. That's the point — and it means the stakes are higher than pure-software tools.
+
+**Plugins execute arbitrary code.** When plugins are enabled, the agent can create and run Python code on your machine with full server privileges. Review agent-generated plugins before loading them. Use `BLE_MCP_PLUGINS=name1,name2` to allow only specific plugins rather than `all`.
+
+**Writes affect real devices.** A bad write to the wrong characteristic can brick a device, trigger unintended behavior, or disrupt other connected systems. Keep writes disabled unless you need them. Use `BLE_MCP_WRITE_ALLOWLIST` to restrict which characteristics are writable.
+
+**Use tool approval deliberately.** When your MCP client prompts you to approve a tool call, consider whether you want to allow it once or always. "Always allow" is convenient but means the agent can repeat that action without further confirmation.
+
+This software is provided as-is under the [MIT license](LICENSE). You are responsible for what the agent does with your hardware.
 
 ---
 

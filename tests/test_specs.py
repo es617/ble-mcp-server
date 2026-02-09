@@ -202,6 +202,31 @@ class TestRegisterSpec:
         r2 = register_spec(spec_file)
         assert r1["spec_id"] == r2["spec_id"]
 
+    def test_rejects_path_outside_project(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        outside = tmp_path.parent / "outside.md"
+        outside.write_text(VALID_SPEC, encoding="utf-8")
+        with pytest.raises(ValueError, match="must be inside the project"):
+            register_spec(outside)
+
+    def test_rejects_traversal_path(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        outside = tmp_path.parent / "sneaky.md"
+        outside.write_text(VALID_SPEC, encoding="utf-8")
+        traversal = tmp_path / ".ble_mcp" / "specs" / ".." / ".." / ".." / "sneaky.md"
+        with pytest.raises(ValueError, match="must be inside the project"):
+            register_spec(traversal)
+
+    def test_allows_path_inside_project(self, monkeypatch, tmp_path):
+        _setup_env(monkeypatch, tmp_path)
+        # Spec in a subdirectory of the project (not in .ble_mcp/specs/)
+        docs_dir = tmp_path / "docs"
+        docs_dir.mkdir()
+        spec_file = docs_dir / "my-device.md"
+        spec_file.write_text(VALID_SPEC, encoding="utf-8")
+        result = register_spec(spec_file)
+        assert result["name"] == "Test Device"
+
 
 # ---------------------------------------------------------------------------
 # Matching
