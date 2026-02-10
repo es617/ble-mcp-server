@@ -133,7 +133,7 @@ claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 
 ## Tools
 
-See [Concepts](docs/concepts.md) for how everything fits together, and the [Tools Reference](docs/tools.md) for detailed input/output schemas.
+See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.md) for how everything fits together, and the [Tools Reference](https://github.com/es617/ble-mcp-server/blob/main/docs/tools.md) for detailed input/output schemas.
 
 | Category | Tools |
 |---|---|
@@ -190,7 +190,7 @@ Plugins can optionally export a `META` dict with matching hints so the agent can
 
 ```python
 META = {
-    "description": "Silicon Labs DFU over BLE",
+    "description": "OTA DFU over BLE",
     "service_uuids": ["1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0"],
     "device_name_contains": "DFU",
 }

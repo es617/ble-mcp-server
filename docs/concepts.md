@@ -105,13 +105,13 @@ Specs aren't just for the agent — they're structured protocol documentation th
 
 ## Plugins — giving the agent shortcut tools
 
-Plugins add device-specific tools to the server. Instead of the agent manually composing read/write sequences, a plugin provides high-level operations like `sensortag.read_temp` or `dfu.upload_firmware`.
+Plugins add device-specific tools to the server. Instead of the agent manually composing read/write sequences, a plugin provides high-level operations like `sensortag.read_temp` or `ota.upload_firmware`.
 
 ```
 .ble_mcp/
   plugins/
     sensortag.py      # adds sensortag.* tools
-    silab_dfu.py      # adds dfu.* tools (works with any Silicon Labs device)
+    ota_dfu.py        # adds ota.* tools (works with any device supporting DFU)
 ```
 
 ### What a plugin provides
@@ -128,16 +128,16 @@ After connecting to a device, the agent checks `ble.plugin.list`. Each plugin in
 
 ```json
 {
-  "name": "silab_dfu",
-  "tools": ["dfu.start", "dfu.upload", "dfu.status"],
+  "name": "ota_dfu",
+  "tools": ["ota.start", "ota.upload", "ota.status"],
   "meta": {
-    "description": "Silicon Labs DFU over BLE",
+    "description": "OTA DFU over BLE",
     "service_uuids": ["1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0"]
   }
 }
 ```
 
-The agent reasons: "This device has service `1d14d6ee...`, and the `silab_dfu` plugin matches that service. I'll use its tools."
+The agent reasons: "This device has service `1d14d6ee...`, and the `ota_dfu` plugin matches that service. I'll use its tools."
 
 ### AI-authored plugins
 

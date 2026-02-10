@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ble-mcp-server"
 version = "0.1.0"
-description = "Bluetooth Low Energy MCP server for Claude Code"
+description = "Bluetooth Low Energy (BLE) Model Context Protocol server for AI agents and developer tooling"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
