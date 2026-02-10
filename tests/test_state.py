@@ -4,6 +4,8 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from ble_mcp_server.state import (
     BleState,
     ConnectionEntry,
@@ -337,3 +339,85 @@ class TestPruneStale:
 
         state.prune_stale()
         assert "active" in state.connections
+
+
+# ---------------------------------------------------------------------------
+# Resource limits
+# ---------------------------------------------------------------------------
+
+
+class TestResourceLimits:
+    def test_connection_limit_enforced(self):
+        state = BleState(max_connections=2)
+        for i in range(2):
+            client = MagicMock()
+            client.is_connected = True
+            entry = ConnectionEntry(connection_id=f"c{i}", address=f"AA:{i:02X}", client=client)
+            state.register_connection(entry)
+
+        # Third should fail
+        client = MagicMock()
+        client.is_connected = True
+        entry = ConnectionEntry(connection_id="c2", address="AA:02", client=client)
+        with pytest.raises(RuntimeError, match="limit reached"):
+            state.register_connection(entry)
+
+    def test_disconnected_connections_dont_count(self):
+        state = BleState(max_connections=2)
+        # Add 2 connections, disconnect one
+        for i in range(2):
+            client = MagicMock()
+            client.is_connected = True
+            entry = ConnectionEntry(connection_id=f"c{i}", address=f"AA:{i:02X}", client=client)
+            state.register_connection(entry)
+        state.connections["c0"].disconnected = True
+
+        # Should succeed — only 1 active
+        client = MagicMock()
+        client.is_connected = True
+        entry = ConnectionEntry(connection_id="c2", address="AA:02", client=client)
+        state.register_connection(entry)
+        assert "c2" in state.connections
+
+    async def test_scan_limit_enforced(self):
+        state = BleState(max_scans=2)
+        for i in range(2):
+            scanner = MagicMock()
+            scan = ScanEntry(scan_id=f"s{i}", scanner=scanner, active=True)
+            state.scans[f"s{i}"] = scan
+
+        with pytest.raises(RuntimeError, match="limit reached"):
+            await state.start_scan(timeout_s=5.0)
+
+    async def test_inactive_scans_dont_count(self):
+        state = BleState(max_scans=2)
+        for i in range(2):
+            scanner = MagicMock()
+            scan = ScanEntry(scan_id=f"s{i}", scanner=scanner, active=False, ended_ts=time.time())
+            state.scans[f"s{i}"] = scan
+
+        scanner = MagicMock()
+        scanner.start = AsyncMock()
+        scanner.stop = AsyncMock()
+        # Patch BleakScanner to return our mock
+        import unittest.mock
+
+        with unittest.mock.patch("ble_mcp_server.state.BleakScanner", return_value=scanner):
+            entry = await state.start_scan(timeout_s=5.0)
+            assert entry.active is True
+            # Clean up
+            await state.stop_scan(entry.scan_id)
+
+    async def test_subscription_limit_enforced(self):
+        state = BleState(max_subscriptions_per_conn=2)
+        mock_client = MagicMock()
+        mock_client.is_connected = True
+        mock_client.start_notify = AsyncMock()
+        entry = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
+        state.connections["c1"] = entry
+
+        await state.add_subscription(entry, "00002a00-0000-1000-8000-00805f9b34fb")
+        await state.add_subscription(entry, "00002a01-0000-1000-8000-00805f9b34fb")
+
+        with pytest.raises(RuntimeError, match="limit reached"):
+            await state.add_subscription(entry, "00002a02-0000-1000-8000-00805f9b34fb")

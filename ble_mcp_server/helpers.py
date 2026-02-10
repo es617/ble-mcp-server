@@ -27,6 +27,11 @@ if _raw_allowlist:
 MAX_RETRIES = 2
 RETRY_DELAY = 0.5  # seconds
 
+# Resource limits (configurable via env vars)
+MAX_CONNECTIONS = int(os.environ.get("BLE_MCP_MAX_CONNECTIONS", "3"))
+MAX_SCANS = int(os.environ.get("BLE_MCP_MAX_SCANS", "5"))
+MAX_SUBSCRIPTIONS_PER_CONN = int(os.environ.get("BLE_MCP_MAX_SUBSCRIPTIONS_PER_CONN", "10"))
+
 # ---------------------------------------------------------------------------
 # Response builders
 # ---------------------------------------------------------------------------

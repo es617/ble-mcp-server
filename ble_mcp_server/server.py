@@ -21,7 +21,15 @@ from ble_mcp_server import (
     handlers_spec,
     handlers_trace,
 )
-from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _result_text
+from ble_mcp_server.helpers import (
+    ALLOW_WRITES,
+    MAX_CONNECTIONS,
+    MAX_SCANS,
+    MAX_SUBSCRIPTIONS_PER_CONN,
+    WRITE_ALLOWLIST,
+    _err,
+    _result_text,
+)
 from ble_mcp_server.plugins import PluginManager, parse_plugin_policy
 from ble_mcp_server.specs import resolve_spec_root
 from ble_mcp_server.state import BleState
@@ -45,7 +53,11 @@ logger = logging.getLogger("ble_mcp_server")
 
 
 def build_server() -> tuple[Server, BleState]:
-    state = BleState()
+    state = BleState(
+        max_connections=MAX_CONNECTIONS,
+        max_scans=MAX_SCANS,
+        max_subscriptions_per_conn=MAX_SUBSCRIPTIONS_PER_CONN,
+    )
     server = Server("ble-mcp-server")
 
     tools: list[Tool] = (
@@ -183,6 +195,8 @@ def build_server() -> tuple[Server, BleState]:
             result = _err("not_found", str(exc))
         except (ValueError, TypeError) as exc:
             result = _err("invalid_params", str(exc))
+        except RuntimeError as exc:
+            result = _err("limit_reached", str(exc))
         except ConnectionError as exc:
             result = _err("disconnected", str(exc))
         except TimeoutError:

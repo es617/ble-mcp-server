@@ -114,7 +114,13 @@ _MAX_STALE_ENTRIES = 100
 class BleState:
     """Central mutable state shared by all tool handlers."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        max_connections: int = 3,
+        max_scans: int = 5,
+        max_subscriptions_per_conn: int = 10,
+    ) -> None:
         self.connections: dict[str, ConnectionEntry] = {}
         # subscription_id -> Subscription (flat index for fast lookup)
         self.subscriptions: dict[str, Subscription] = {}
@@ -124,6 +130,10 @@ class BleState:
         # Optional async callback fired on first buffered notification: (subscription_id, connection_id, char_uuid) -> None
         self.on_notification_cb: Any | None = None
         self._shutdown_done: bool = False
+        # Resource limits
+        self.max_connections = max_connections
+        self.max_scans = max_scans
+        self.max_subscriptions_per_conn = max_subscriptions_per_conn
 
     # -- helpers -------------------------------------------------------------
 
@@ -243,7 +253,17 @@ class BleState:
         return entry
 
     def register_connection(self, entry: ConnectionEntry) -> None:
-        """Add a successfully-connected entry to state."""
+        """Add a successfully-connected entry to state.
+
+        Raises ``RuntimeError`` if the active connection limit is reached.
+        """
+        active = sum(1 for c in self.connections.values() if not c.disconnected)
+        if active >= self.max_connections:
+            raise RuntimeError(
+                f"Active connection limit reached ({self.max_connections}). "
+                f"Disconnect an existing device first. "
+                f"Set BLE_MCP_MAX_CONNECTIONS to adjust."
+            )
         self.connections[entry.connection_id] = entry
 
     def _handle_disconnect(self, entry: ConnectionEntry, address: str, cid: str) -> None:
@@ -292,6 +312,13 @@ class BleState:
         service_uuid: str | None = None,
     ) -> ScanEntry:
         self.prune_stale()
+        active_scans = sum(1 for s in self.scans.values() if s.active)
+        if active_scans >= self.max_scans:
+            raise RuntimeError(
+                f"Active scan limit reached ({self.max_scans}). "
+                f"Stop an existing scan first or wait for it to finish. "
+                f"Set BLE_MCP_MAX_SCANS to adjust."
+            )
         sid = self.new_scan_id()
 
         scanner_kwargs: dict[str, Any] = {}
@@ -425,6 +452,13 @@ class BleState:
         entry: ConnectionEntry,
         char_uuid: str,
     ) -> Subscription:
+        if len(entry.subscriptions) >= self.max_subscriptions_per_conn:
+            raise RuntimeError(
+                f"Subscription limit reached ({self.max_subscriptions_per_conn}) "
+                f"for connection {entry.connection_id}. "
+                f"Unsubscribe from an existing characteristic first. "
+                f"Set BLE_MCP_MAX_SUBSCRIPTIONS_PER_CONN to adjust."
+            )
         sid = self.new_subscription_id()
         sub = Subscription(subscription_id=sid, connection_id=entry.connection_id, char_uuid=char_uuid)
 

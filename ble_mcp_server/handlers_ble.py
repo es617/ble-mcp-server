@@ -428,7 +428,14 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
         return _err("connect_failed", f"Failed to connect to {address}")
 
     # Only register in state after a successful connect
-    state.register_connection(entry)
+    try:
+        state.register_connection(entry)
+    except RuntimeError:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+        raise
     logger.info("Connected to %s as %s", address, entry.connection_id)
 
     # Include device identity from scan cache for spec matching
