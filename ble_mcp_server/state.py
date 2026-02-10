@@ -219,24 +219,16 @@ class BleState:
         def _on_disconnect(_client: BleakClient) -> None:
             nonlocal entry
             if entry is not None and not entry.disconnected:
+                # Set immediately to prevent re-entry (single bool assignment is safe)
                 entry.disconnected = True
                 entry.disconnect_ts = time.time()
                 logger.warning("Device %s (%s) disconnected unexpectedly", address, cid)
-                for sub in entry.subscriptions.values():
-                    sub.active = False
-                    sub._stop_event.set()
-                    self.subscriptions.pop(sub.subscription_id, None)
-                entry.subscriptions.clear()
-                # Best-effort MCP notification — state remains source of truth.
-                if self.on_disconnect_cb is not None:
-                    try:
-                        loop = asyncio.get_running_loop()
-                        loop.call_soon_threadsafe(
-                            loop.create_task,
-                            self.on_disconnect_cb(address, cid),
-                        )
-                    except Exception:
-                        logger.debug("Failed to schedule disconnect notification", exc_info=True)
+                # Marshal all state mutations to the event loop thread
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.call_soon_threadsafe(self._handle_disconnect, entry, address, cid)
+                except RuntimeError:
+                    pass  # event loop closed during shutdown
 
         kwargs: dict[str, Any] = {
             "timeout": timeout,
@@ -252,6 +244,19 @@ class BleState:
     def register_connection(self, entry: ConnectionEntry) -> None:
         """Add a successfully-connected entry to state."""
         self.connections[entry.connection_id] = entry
+
+    def _handle_disconnect(self, entry: ConnectionEntry, address: str, cid: str) -> None:
+        """Clean up subscriptions and fire disconnect callback.
+
+        Called on the event loop thread via ``call_soon_threadsafe``.
+        """
+        for sub in list(entry.subscriptions.values()):
+            sub.active = False
+            sub._stop_event.set()
+            self.subscriptions.pop(sub.subscription_id, None)
+        entry.subscriptions.clear()
+        if self.on_disconnect_cb is not None:
+            asyncio.get_running_loop().create_task(self.on_disconnect_cb(address, cid))
 
     async def remove_connection(self, connection_id: str) -> None:
         entry = self.get_connection(connection_id)
@@ -315,7 +320,11 @@ class BleState:
                 }
             if adv.service_data:
                 info["service_data"] = {uuid: bytes(data).hex() for uuid, data in adv.service_data.items()}
-            entry.devices[device.address] = info
+            try:
+                loop = asyncio.get_running_loop()
+                loop.call_soon_threadsafe(entry.devices.__setitem__, device.address, info)
+            except RuntimeError:
+                pass  # event loop closed during shutdown
 
         scanner = BleakScanner(
             detection_callback=_detection_callback,
@@ -381,6 +390,26 @@ class BleState:
 
     # -- subscriptions -------------------------------------------------------
 
+    def _enqueue_notification(self, sub: Subscription, notification: dict[str, Any]) -> None:
+        """Enqueue a notification and fire the alert callback if needed.
+
+        Called on the event loop thread via ``call_soon_threadsafe``.
+        """
+        try:
+            sub.queue.put_nowait(notification)
+        except asyncio.QueueFull:
+            try:
+                sub.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            sub.queue.put_nowait(notification)
+            sub.dropped += 1
+        if not sub.notified_client and self.on_notification_cb is not None:
+            sub.notified_client = True
+            asyncio.get_running_loop().create_task(
+                self.on_notification_cb(sub.subscription_id, sub.connection_id, sub.char_uuid)
+            )
+
     async def add_subscription(
         self,
         entry: ConnectionEntry,
@@ -392,31 +421,18 @@ class BleState:
         def _callback(_sender: Any, data: bytearray) -> None:
             if not sub.active:
                 return
+            # Build notification on the callback thread (no shared state mutation)
             notification = {
                 "value_b64": base64.b64encode(bytes(data)).decode(),
                 "value_hex": bytes(data).hex(),
                 "ts": time.time(),
             }
+            # Marshal queue mutation to the event loop thread
             try:
-                sub.queue.put_nowait(notification)
-            except asyncio.QueueFull:
-                # Drop oldest to make room for the latest value
-                try:
-                    sub.queue.get_nowait()
-                except asyncio.QueueEmpty:
-                    pass
-                sub.queue.put_nowait(notification)
-                sub.dropped += 1
-            if not sub.notified_client and self.on_notification_cb is not None:
-                sub.notified_client = True
-                try:
-                    loop = asyncio.get_running_loop()
-                    loop.call_soon_threadsafe(
-                        loop.create_task,
-                        self.on_notification_cb(sub.subscription_id, sub.connection_id, sub.char_uuid),
-                    )
-                except Exception:
-                    logger.debug("Failed to schedule notification alert", exc_info=True)
+                loop = asyncio.get_running_loop()
+                loop.call_soon_threadsafe(self._enqueue_notification, sub, notification)
+            except RuntimeError:
+                pass  # event loop closed during shutdown
 
         await entry.client.start_notify(char_uuid, _callback)
         entry.subscriptions[sid] = sub

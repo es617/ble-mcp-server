@@ -203,6 +203,14 @@ class PluginManager:
         if self.allowlist is not None and name not in self.allowlist:
             raise PermissionError(f"Plugin '{name}' is not in the allowlist (BLE_MCP_PLUGINS={self.policy}).")
 
+    @staticmethod
+    def _plugin_name_from_path(plugin_path: Path) -> str:
+        """Derive the plugin name from a path without executing any code."""
+        resolved = plugin_path.resolve()
+        if resolved.is_dir():
+            return resolved.name
+        return resolved.stem
+
     def load(self, plugin_path: Path) -> PluginInfo:
         """Load a plugin and register its tools/handlers.
 
@@ -214,12 +222,10 @@ class PluginManager:
         if plugins_root not in resolved.parents and resolved != plugins_root:
             raise ValueError(f"Plugin path must be inside {self.plugins_dir}/ — got {plugin_path}")
 
+        # Check policy BEFORE executing any plugin code
+        self._check_allowed(self._plugin_name_from_path(plugin_path))
+
         name, tools, handlers, module_key, meta = load_plugin(plugin_path)
-        try:
-            self._check_allowed(name)
-        except PermissionError:
-            sys.modules.pop(module_key, None)
-            raise
 
         # Check for name collisions
         existing_names = {t.name for t in self._tools}

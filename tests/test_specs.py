@@ -283,6 +283,23 @@ class TestReadSpec:
         with pytest.raises(KeyError):
             read_spec("nonexistent0000")
 
+    def test_rejects_path_outside_project_in_index(self, monkeypatch, tmp_path):
+        """If index.json is tampered to point outside the project, read_spec refuses."""
+        import json
+
+        spec_root = _setup_env(monkeypatch, tmp_path)
+        spec_root.mkdir(parents=True, exist_ok=True)
+        # Write a tampered index pointing to a file outside the project
+        index_path = spec_root / "index.json"
+        index_path.write_text(
+            json.dumps(
+                {"bad": {"spec_id": "bad", "path": "/etc/passwd", "name": "Evil", "kind": "ble-protocol"}}
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="outside the project"):
+            read_spec("bad")
+
 
 # ---------------------------------------------------------------------------
 # Search

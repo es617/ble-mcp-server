@@ -59,9 +59,16 @@ class TraceBuffer:
         if file_path:
             p = Path(file_path)
             p.parent.mkdir(parents=True, exist_ok=True)
-            if p.is_symlink():
-                raise ValueError(f"Trace path is a symlink (refusing to follow): {file_path}")
-            self._fh = open(file_path, "a", encoding="utf-8")  # noqa: SIM115
+            # Open atomically without following symlinks (TOCTOU-safe)
+            nofollow = getattr(os, "O_NOFOLLOW", 0)
+            if nofollow:
+                fd = os.open(file_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT | nofollow, 0o644)
+                self._fh = os.fdopen(fd, "a", encoding="utf-8")
+            else:
+                # O_NOFOLLOW unavailable (Windows) — fall back to check-then-open
+                if p.is_symlink():
+                    raise ValueError(f"Trace path is a symlink (refusing to follow): {file_path}")
+                self._fh = open(file_path, "a", encoding="utf-8")  # noqa: SIM115
 
     def emit(self, event: dict[str, Any]) -> None:
         event["ts"] = datetime.now(UTC).isoformat()

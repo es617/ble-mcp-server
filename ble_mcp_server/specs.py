@@ -236,7 +236,11 @@ def read_spec(spec_id: str) -> dict[str, Any]:
         raise KeyError(f"Unknown spec_id: {spec_id}")
 
     entry = index[spec_id]
-    file_path = Path(entry["path"])
+    file_path = Path(entry["path"]).resolve()
+
+    project = _project_root()
+    if project not in file_path.parents and file_path != project:
+        raise ValueError(f"Spec path in index points outside the project directory: {file_path}")
 
     if not file_path.exists():
         raise FileNotFoundError(f"Spec file missing: {file_path}")

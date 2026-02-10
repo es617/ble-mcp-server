@@ -98,14 +98,17 @@ class TestNotificationQueueOverflow:
         callback = mock_client.start_notify.call_args[0][1]
 
         # Fill the queue to capacity (256)
+        # Callbacks schedule via call_soon_threadsafe, so yield to let them run
         for i in range(256):
             callback(None, bytearray([i & 0xFF]))
+        await asyncio.sleep(0)
 
         assert sub.queue.full()
         assert sub.dropped == 0
 
         # One more triggers overflow — drops oldest, increments counter
         callback(None, bytearray([0xFF]))
+        await asyncio.sleep(0)
         assert sub.dropped == 1
         assert sub.queue.qsize() == 256
 
@@ -129,6 +132,7 @@ class TestNotificationQueueOverflow:
 
         sub.active = False
         callback(None, bytearray([0x01]))
+        await asyncio.sleep(0)
 
         assert sub.queue.empty()
 

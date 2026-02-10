@@ -58,7 +58,9 @@ class TestTraceBuffer:
         real_file.touch()
         link = tmp_path / "link.jsonl"
         link.symlink_to(real_file)
-        with pytest.raises(ValueError, match="symlink"):
+        # On POSIX: os.open with O_NOFOLLOW raises OSError
+        # On Windows (no O_NOFOLLOW): falls back to check-then-open raising ValueError
+        with pytest.raises((OSError, ValueError)):
             TraceBuffer(file_path=str(link))
 
     def test_file_sink(self, tmp_path: Path):
