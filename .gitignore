@@ -10,3 +10,5 @@ build/
 ble_mcp_server/_version.py
 .ble_mcp/index.json
 .ble_mcp/traces/
+coverage.md
+.coverage
