@@ -23,7 +23,7 @@ The agent sees tools like `ble.connect`, `ble.read`, `ble.subscribe`. It calls t
 
 ## Security model
 
-The server is **safe by default**. Every risky capability is opt-in via environment variables.
+Because this server controls real hardware and can execute code via plugins, all risky capabilities are opt-in and enforced by the server.
 
 ```
                           ┌──────────────────────┐
@@ -95,7 +95,7 @@ You can also write specs by hand if you prefer. They're just markdown files with
 
 After connecting to a device, the agent checks for registered specs, attaches a matching one, and references it throughout the session — looking up characteristic UUIDs, command formats, and multi-step flows as needed.
 
-Specs are freeform markdown. The agent reads and reasons about them — there's no rigid schema to follow.
+Specs are freeform markdown. The agent reads and reasons about them — there's no rigid schema to fight, so specs can evolve naturally with your protocol.
 
 ### Beyond the agent
 
@@ -141,7 +141,7 @@ The agent reasons: "This device has service `1d14d6ee...`, and the `ota_dfu` plu
 
 ### AI-authored plugins
 
-The agent can also **create** plugins. Using `ble.plugin.template`, it generates a skeleton, fills in the implementation based on the device spec, and saves it to `.ble_mcp/plugins/`. After a server restart, the new tools are available.
+The agent can also **create** plugins. Using `ble.plugin.template`, it generates a skeleton, fills in the implementation based on the device spec, and saves it to `.ble_mcp/plugins/`. After a server restart (or hot-reload), the new tools are available. Review generated plugins before enabling them in sensitive environments.
 
 This is the core loop: the agent explores a device, writes a plugin for it, and future sessions get shortcut tools.
 
