@@ -16,14 +16,16 @@ Works out of the box with Claude Code and any MCP-compatible runtime. Communicat
 
 You have a BLE device. You want an AI agent to talk to it — scan, connect, read sensors, send commands, stream data. This server makes that possible.
 
-It gives any MCP-compatible agent a full set of BLE tools: scanning, connecting, reading, writing, subscribing to notifications, and managing protocol knowledge. The agent calls these tools, gets structured JSON back, and reasons about what to do next — no human in the loop for each BLE operation.
+It gives any MCP-compatible agent a full set of BLE tools: scanning, connecting, reading, writing, subscribing to notifications — plus protocol specs and device plugins so the agent can understand higher-level device behavior instead of just raw UUIDs and bytes.
+
+The agent calls these tools, gets structured JSON back, and reasons about what to do next — no human in the loop for each BLE operation.
 
 **What agents can do with it:**
 
 - **Develop and debug** — connect to your device, explore its services, read characteristics, test commands, and diagnose issues conversationally. "Why is this sensor returning zeros?" becomes a question you can ask.
-- **Iterate on new hardware** — building a BLE device? Let the agent test your protocol as you develop it. It remembers the spec, catches regressions, and adapts when things change.
-- **Automate testing** — write plugin tools for your device, then let the agent run test sequences: enable a sensor, collect 100 samples, verify the values, report results.
-- **Explore** — point the agent at a device you've never seen. It discovers services, reads characteristics, probes command sequences, and builds up protocol documentation from scratch.
+- **Iterate on new hardware** — building a BLE device? Attach a protocol spec so the agent understands your commands and data formats as you evolve them.
+- **Automate testing** — write device-specific plugins that expose high-level actions (e.g., device.start_stream, device.run_self_test), then let the agent run test sequences: enable a sensor, collect samples, validate values, report results.
+- **Explore** — point the agent at a device you’ve never seen. It discovers services, probes characteristics, and builds up protocol documentation from scratch.
 - **Build BLE automation** — agents controlling real hardware for real tasks: reading environmental sensors on a schedule, managing a fleet of BLE beacons, triggering actuators based on conditions.
 
 ---
@@ -31,7 +33,7 @@ It gives any MCP-compatible agent a full set of BLE tools: scanning, connecting,
 ## Who is this for?
 
 - **Embedded engineers** — faster iteration on BLE protocols, conversational debugging, automated test sequences
-- **Hobbyists and makers** — explore BLE devices without writing boilerplate; let the agent figure out the protocol
+- **Hobbyists and makers** — explore BLE devices without writing boilerplate; let the agent help reverse-engineer simple protocols
 - **QA and test engineers** — build repeatable BLE test suites with plugin tools, run them from CI or agent sessions
 - **Support and field engineers** — diagnose BLE device issues interactively without specialized tooling
 - **Researchers** — automate data collection from BLE sensors, explore device capabilities systematically
