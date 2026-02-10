@@ -658,10 +658,10 @@ async def handle_drain_notifications(state: BleState, args: dict[str, Any]) -> d
     _, sub = result
 
     notifications: list[dict[str, Any]] = []
-    deadline = asyncio.get_event_loop().time() + timeout
+    deadline = asyncio.get_running_loop().time() + timeout
 
     # Wait up to the full timeout for the first notification
-    remaining = deadline - asyncio.get_event_loop().time()
+    remaining = deadline - asyncio.get_running_loop().time()
     if remaining <= 0:
         return _ok(notifications=notifications, dropped=sub.dropped)
 
@@ -673,7 +673,7 @@ async def handle_drain_notifications(state: BleState, args: dict[str, Any]) -> d
 
     # Collect subsequent notifications with idle_timeout, respecting the overall deadline
     while len(notifications) < max_items:
-        remaining = deadline - asyncio.get_event_loop().time()
+        remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             break
         wait = min(idle_timeout, remaining)

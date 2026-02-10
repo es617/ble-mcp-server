@@ -123,6 +123,7 @@ class BleState:
         self.on_disconnect_cb: Any | None = None
         # Optional async callback fired on first buffered notification: (subscription_id, connection_id, char_uuid) -> None
         self.on_notification_cb: Any | None = None
+        self._shutdown_done: bool = False
 
     # -- helpers -------------------------------------------------------------
 
@@ -344,7 +345,10 @@ class BleState:
         # Schedule auto-stop after timeout_s
         async def _auto_stop() -> None:
             await asyncio.sleep(timeout_s)
-            await self.stop_scan(sid)
+            try:
+                await self.stop_scan(sid)
+            except Exception:
+                logger.debug("auto-stop failed for scan %s", sid, exc_info=True)
 
         entry._timeout_task = asyncio.create_task(_auto_stop())
         logger.info("Scan %s started (timeout=%.1fs)", sid, timeout_s)
@@ -372,7 +376,13 @@ class BleState:
         return devices, entry.active
 
     async def shutdown(self) -> None:
-        """Stop all scans and disconnect every client – used at server shutdown."""
+        """Stop all scans and disconnect every client – used at server shutdown.
+
+        Idempotent: safe to call multiple times.
+        """
+        if self._shutdown_done:
+            return
+        self._shutdown_done = True
         # Stop active scans
         for sid in list(self.scans.keys()):
             try:

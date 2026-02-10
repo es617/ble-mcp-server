@@ -40,24 +40,6 @@ logging.basicConfig(
 logger = logging.getLogger("ble_mcp_server")
 
 # ---------------------------------------------------------------------------
-# Tool & handler registry (merged from handler modules)
-# ---------------------------------------------------------------------------
-
-TOOLS: list[Tool] = (
-    handlers_ble.TOOLS
-    + handlers_introspection.TOOLS
-    + handlers_spec.TOOLS
-    + handlers_trace.TOOLS
-    + handlers_plugin.TOOLS
-)
-_HANDLERS: dict[str, Any] = {
-    **handlers_ble.HANDLERS,
-    **handlers_introspection.HANDLERS,
-    **handlers_spec.HANDLERS,
-    **handlers_trace.HANDLERS,
-}
-
-# ---------------------------------------------------------------------------
 # Server construction
 # ---------------------------------------------------------------------------
 
@@ -65,6 +47,20 @@ _HANDLERS: dict[str, Any] = {
 def build_server() -> tuple[Server, BleState]:
     state = BleState()
     server = Server("ble-mcp-server")
+
+    tools: list[Tool] = (
+        handlers_ble.TOOLS
+        + handlers_introspection.TOOLS
+        + handlers_spec.TOOLS
+        + handlers_trace.TOOLS
+        + handlers_plugin.TOOLS
+    )
+    handlers: dict[str, Any] = {
+        **handlers_ble.HANDLERS,
+        **handlers_introspection.HANDLERS,
+        **handlers_spec.HANDLERS,
+        **handlers_trace.HANDLERS,
+    }
 
     # --- Disconnect notification via MCP log message ---
     _session = None
@@ -153,17 +149,17 @@ def build_server() -> tuple[Server, BleState]:
     plugins_enabled, plugins_allowlist = parse_plugin_policy()
     manager = PluginManager(
         plugins_dir,
-        TOOLS,
-        _HANDLERS,
+        tools,
+        handlers,
         enabled=plugins_enabled,
         allowlist=plugins_allowlist,
     )
     manager.load_all()
-    _HANDLERS.update(handlers_plugin.make_handlers(manager, server))
+    handlers.update(handlers_plugin.make_handlers(manager, server))
 
     @server.list_tools()
     async def _list_tools() -> list[Tool]:
-        return TOOLS
+        return tools
 
     @server.call_tool()
     async def _call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextContent]:
@@ -178,7 +174,7 @@ def build_server() -> tuple[Server, BleState]:
             buf.emit({"event": "tool_call_start", "tool": name, "args": safe_args, "connection_id": cid})
             t0 = time.monotonic()
 
-        handler = _HANDLERS.get(name)
+        handler = handlers.get(name)
         if handler is None:
             return _result_text(_err("unknown_tool", f"No tool named {name}"))
         try:
@@ -241,8 +237,8 @@ async def _run() -> None:
 
         def _request_shutdown(sig: signal.Signals) -> None:
             logger.info("Received %s – shutting down", sig.name)
-            # Schedule graceful shutdown
-            loop.create_task(_graceful_shutdown(state, server))
+            # Close the read stream to unblock server.run(), then clean up once after it exits
+            loop.create_task(read_stream.aclose())
 
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
@@ -256,15 +252,7 @@ async def _run() -> None:
         )
         await server.run(read_stream, write_stream, init_options)
 
-    # After server.run returns, clean up BLE connections
-    await state.shutdown()
-    buf = get_trace_buffer()
-    if buf:
-        buf.close()
-
-
-async def _graceful_shutdown(state: BleState, server: Server) -> None:
-    logger.info("Graceful shutdown: disconnecting all BLE clients")
+    # Single cleanup path — runs after server.run() exits (normal or signal)
     await state.shutdown()
     buf = get_trace_buffer()
     if buf:
