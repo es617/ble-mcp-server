@@ -193,7 +193,7 @@ Plugins can optionally export a `META` dict with matching hints so the agent can
 ```python
 META = {
     "description": "OTA DFU over BLE",
-    "service_uuids": ["1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0"],
+    "service_uuids": ["adc710df-5a73-4810-9d11-63ae660a448b"],
     "device_name_contains": "DFU",
 }
 ```
@@ -310,13 +310,13 @@ This server connects an AI agent to real hardware. That's the point — and it m
 
 **Use tool approval deliberately.** When your MCP client prompts you to approve a tool call, consider whether you want to allow it once or always. "Always allow" is convenient but means the agent can repeat that action without further confirmation.
 
-This software is provided as-is under the [MIT license](LICENSE). You are responsible for what the agent does with your hardware.
+This software is provided as-is under the [MIT license](https://github.com/es617/ble-mcp-server/blob/main/LICENSE). You are responsible for what the agent does with your hardware.
 
 ---
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the MIT License — see [LICENSE](https://github.com/es617/ble-mcp-server/blob/main/LICENSE) for details.
 
 
 ## Acknowledgements

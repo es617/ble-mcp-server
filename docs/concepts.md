@@ -132,7 +132,7 @@ After connecting to a device, the agent checks `ble.plugin.list`. Each plugin in
   "tools": ["ota.start", "ota.upload", "ota.status"],
   "meta": {
     "description": "OTA DFU over BLE",
-    "service_uuids": ["1d14d6ee-fd63-4fa1-bfa4-8f47b42119f0"]
+    "service_uuids": ["adc710df-5a73-4810-9d11-63ae660a448b"]
   }
 }
 ```
