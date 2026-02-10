@@ -188,6 +188,92 @@ Returns `{ "ok": true, "notifications": [...], "dropped": 0 }`.
 
 ---
 
+## Introspection
+
+### ble.connections.list
+
+List all tracked connections with their status, address, name, timestamps, and subscription count. Useful for recovering connection IDs after context loss.
+
+```json
+{}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "connections": [{
+    "connection_id": "abc123",
+    "address": "AA:BB:CC:DD:EE:FF",
+    "name": "Arduino",
+    "connected": true,
+    "created_ts": 1700000000.0,
+    "last_seen_ts": 1700000050.0,
+    "subscription_count": 1,
+    "spec": { "spec_id": "a1b2c3", "name": "MyDevice Protocol" }
+  }],
+  "count": 1
+}
+```
+
+Disconnected entries include `disconnect_ts`. The `spec` field is `null` if no spec is attached.
+
+### ble.subscriptions.list
+
+List all active subscriptions with their status, queue depth, and dropped count. Optionally filter by `connection_id`.
+
+```json
+{ "connection_id": "abc123" }
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "subscriptions": [{
+    "subscription_id": "sub456",
+    "connection_id": "abc123",
+    "char_uuid": "00002a37-0000-1000-8000-00805f9b34fb",
+    "active": true,
+    "queue_depth": 3,
+    "dropped": 0,
+    "created_ts": 1700000010.0
+  }],
+  "count": 1
+}
+```
+
+### ble.scans.list
+
+List all tracked scans with their status, filters, timestamps, and device count. Does not dump full device lists — use `ble.scan_get_results` for that.
+
+```json
+{}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "scans": [{
+    "scan_id": "a1b2c3",
+    "active": true,
+    "started_ts": 1700000000.0,
+    "timeout_s": 10.0,
+    "num_devices_seen": 5,
+    "filters": { "name_filter": "Arduino", "service_uuid": null }
+  }],
+  "count": 1
+}
+```
+
+The `filters` field is `null` when no filters were applied.
+
+---
+
 ## Protocol Specs
 
 Tools for managing BLE device protocol specs. Specs are markdown files with YAML front-matter stored in `.ble_mcp/specs/`.

@@ -1,9 +1,17 @@
 """Unit tests for pure-python helpers in ble_mcp_server.state."""
 
 import asyncio
+import time
 from unittest.mock import AsyncMock, MagicMock
 
-from ble_mcp_server.state import BleState, ConnectionEntry, check_allowlist, normalize_uuid
+from ble_mcp_server.state import (
+    BleState,
+    ConnectionEntry,
+    ScanEntry,
+    Subscription,
+    check_allowlist,
+    normalize_uuid,
+)
 
 # ---------------------------------------------------------------------------
 # normalize_uuid
@@ -188,3 +196,140 @@ class TestOnDisconnectCallback:
         captured_disconnect_cb(entry.client)
 
         assert entry.disconnected is True
+
+
+# ---------------------------------------------------------------------------
+# Timestamp fields
+# ---------------------------------------------------------------------------
+
+
+class TestTimestampFields:
+    def test_connection_entry_has_timestamps(self):
+        client = MagicMock()
+        before = time.time()
+        entry = ConnectionEntry(connection_id="c1", address="AA:BB", client=client)
+        after = time.time()
+        assert before <= entry.created_ts <= after
+        assert before <= entry.last_seen_ts <= after
+        assert entry.name is None
+
+    def test_subscription_has_created_ts(self):
+        before = time.time()
+        sub = Subscription(subscription_id="s1", connection_id="c1", char_uuid="2a00")
+        after = time.time()
+        assert before <= sub.created_ts <= after
+
+    def test_scan_entry_has_timestamps(self):
+        scanner = MagicMock()
+        before = time.time()
+        entry = ScanEntry(scan_id="scan1", scanner=scanner)
+        after = time.time()
+        assert before <= entry.started_ts <= after
+        assert entry.timeout_s == 10.0
+
+    def test_scan_entry_custom_timeout(self):
+        scanner = MagicMock()
+        entry = ScanEntry(scan_id="scan1", scanner=scanner, timeout_s=30.0)
+        assert entry.timeout_s == 30.0
+
+    def test_scan_entry_ended_ts_default_none(self):
+        scanner = MagicMock()
+        entry = ScanEntry(scan_id="scan1", scanner=scanner)
+        assert entry.ended_ts is None
+
+
+# ---------------------------------------------------------------------------
+# prune_stale
+# ---------------------------------------------------------------------------
+
+
+class TestPruneStale:
+    def test_prunes_expired_scans(self):
+        state = BleState()
+        scanner = MagicMock()
+        entry = ScanEntry(scan_id="old", scanner=scanner, active=False, ended_ts=time.time() - 700)
+        state.scans["old"] = entry
+        # Active scan should survive
+        active = ScanEntry(scan_id="live", scanner=scanner)
+        state.scans["live"] = active
+
+        state.prune_stale()
+        assert "old" not in state.scans
+        assert "live" in state.scans
+
+    def test_keeps_recent_inactive_scans(self):
+        state = BleState()
+        scanner = MagicMock()
+        entry = ScanEntry(scan_id="recent", scanner=scanner, active=False, ended_ts=time.time() - 60)
+        state.scans["recent"] = entry
+
+        state.prune_stale()
+        assert "recent" in state.scans
+
+    def test_caps_scans_at_100(self):
+        state = BleState()
+        scanner = MagicMock()
+        # Add 110 inactive scans, all recent (not TTL-expired)
+        for i in range(110):
+            entry = ScanEntry(
+                scan_id=f"s{i}",
+                scanner=scanner,
+                active=False,
+                ended_ts=time.time() - i,  # older scans have lower ended_ts
+            )
+            state.scans[f"s{i}"] = entry
+
+        state.prune_stale()
+        assert len(state.scans) == 100
+        # The oldest 10 (s100..s109) should be gone
+        assert "s109" not in state.scans
+        # The most recent should survive
+        assert "s0" in state.scans
+
+    def test_prunes_expired_disconnected_connections(self):
+        state = BleState()
+        client = MagicMock()
+        client.is_connected = False
+        entry = ConnectionEntry(
+            connection_id="old",
+            address="AA:BB",
+            client=client,
+            disconnected=True,
+            disconnect_ts=time.time() - 700,
+        )
+        state.connections["old"] = entry
+        # Live connection should survive
+        live_client = MagicMock()
+        live_client.is_connected = True
+        live = ConnectionEntry(connection_id="live", address="CC:DD", client=live_client)
+        state.connections["live"] = live
+
+        state.prune_stale()
+        assert "old" not in state.connections
+        assert "live" in state.connections
+
+    def test_keeps_recent_disconnected_connections(self):
+        state = BleState()
+        client = MagicMock()
+        client.is_connected = False
+        entry = ConnectionEntry(
+            connection_id="recent",
+            address="AA:BB",
+            client=client,
+            disconnected=True,
+            disconnect_ts=time.time() - 60,
+        )
+        state.connections["recent"] = entry
+
+        state.prune_stale()
+        assert "recent" in state.connections
+
+    def test_does_not_prune_active_connections(self):
+        state = BleState()
+        client = MagicMock()
+        client.is_connected = True
+        entry = ConnectionEntry(connection_id="active", address="AA:BB", client=client)
+        state.connections["active"] = entry
+
+        state.prune_stale()
+        assert "active" in state.connections

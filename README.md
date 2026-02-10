@@ -140,6 +140,7 @@ See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.m
 | Category | Tools |
 |---|---|
 | **BLE Core** | `ble.scan_start`, `ble.scan_get_results`, `ble.scan_stop`, `ble.connect`, `ble.disconnect`, `ble.connection_status`, `ble.discover`, `ble.mtu`, `ble.read`, `ble.write`, `ble.read_descriptor`, `ble.write_descriptor`, `ble.subscribe`, `ble.unsubscribe`, `ble.wait_notification`, `ble.poll_notifications`, `ble.drain_notifications` |
+| **Introspection** | `ble.connections.list`, `ble.subscriptions.list`, `ble.scans.list` |
 | **Protocol Specs** | `ble.spec.template`, `ble.spec.register`, `ble.spec.list`, `ble.spec.attach`, `ble.spec.get`, `ble.spec.read`, `ble.spec.search` |
 | **Tracing** | `ble.trace.status`, `ble.trace.tail` |
 | **Plugins** | `ble.plugin.template`, `ble.plugin.list`, `ble.plugin.reload`, `ble.plugin.load` |

@@ -71,6 +71,7 @@ class Subscription:
     # True after the MCP client has been notified that data is available.
     # Reset by drain/poll/wait so the next notification triggers a new alert.
     notified_client: bool = False
+    created_ts: float = field(default_factory=time.time)
 
 
 @dataclass
@@ -84,6 +85,9 @@ class ScanEntry:
     service_uuid: str | None = None
     active: bool = True
     _timeout_task: asyncio.Task[None] | None = field(default=None, repr=False)
+    started_ts: float = field(default_factory=time.time)
+    timeout_s: float = 10.0
+    ended_ts: float | None = None
 
 
 @dataclass
@@ -98,6 +102,13 @@ class ConnectionEntry:
     disconnected: bool = False
     disconnect_ts: float | None = None
     spec: dict[str, Any] | None = None  # Attached spec cache (in-memory, per session)
+    created_ts: float = field(default_factory=time.time)
+    last_seen_ts: float = field(default_factory=time.time)
+    name: str | None = None
+
+
+_STALE_TTL_S = 600.0  # 10 minutes
+_MAX_STALE_ENTRIES = 100
 
 
 class BleState:
@@ -124,19 +135,63 @@ class BleState:
     def new_scan_id(self) -> str:
         return _uuid.uuid4().hex[:12]
 
+    def prune_stale(self) -> None:
+        """Remove stale finished scans and disconnected connections."""
+        now = time.time()
+
+        # Prune inactive scans past TTL
+        stale_scans = [
+            sid
+            for sid, s in self.scans.items()
+            if not s.active and s.ended_ts is not None and now - s.ended_ts > _STALE_TTL_S
+        ]
+        for sid in stale_scans:
+            del self.scans[sid]
+
+        # Cap: if still over limit, drop oldest inactive first
+        if len(self.scans) > _MAX_STALE_ENTRIES:
+            inactive = sorted(
+                ((sid, s) for sid, s in self.scans.items() if not s.active),
+                key=lambda t: t[1].ended_ts or t[1].started_ts,
+            )
+            to_drop = len(self.scans) - _MAX_STALE_ENTRIES
+            for sid, _ in inactive[:to_drop]:
+                del self.scans[sid]
+
+        # Prune disconnected connections past TTL
+        stale_conns = [
+            cid
+            for cid, c in self.connections.items()
+            if c.disconnected and c.disconnect_ts is not None and now - c.disconnect_ts > _STALE_TTL_S
+        ]
+        for cid in stale_conns:
+            del self.connections[cid]
+
+        # Cap: if still over limit, drop oldest disconnected first
+        if len(self.connections) > _MAX_STALE_ENTRIES:
+            disconnected = sorted(
+                ((cid, c) for cid, c in self.connections.items() if c.disconnected),
+                key=lambda t: t[1].disconnect_ts or t[1].created_ts,
+            )
+            to_drop = len(self.connections) - _MAX_STALE_ENTRIES
+            for cid, _ in disconnected[:to_drop]:
+                del self.connections[cid]
+
     def get_scan(self, scan_id: str) -> ScanEntry:
         """Raise ``KeyError`` when the scan does not exist."""
         try:
             return self.scans[scan_id]
         except KeyError:
-            raise KeyError(f"Unknown scan_id: {scan_id}") from None
+            raise KeyError(f"Unknown scan_id: {scan_id}. Call ble.scans.list to see active scans.") from None
 
     def get_connection(self, connection_id: str) -> ConnectionEntry:
         """Raise ``KeyError`` when the connection does not exist."""
         try:
             return self.connections[connection_id]
         except KeyError:
-            raise KeyError(f"Unknown connection_id: {connection_id}") from None
+            raise KeyError(
+                f"Unknown connection_id: {connection_id}. Call ble.connections.list to see active connections."
+            ) from None
 
     def require_connected(self, connection_id: str) -> ConnectionEntry:
         """Get a connection and verify it's still alive. Raises ``ConnectionError``."""
@@ -230,6 +285,7 @@ class BleState:
         name_filter: str | None = None,
         service_uuid: str | None = None,
     ) -> ScanEntry:
+        self.prune_stale()
         sid = self.new_scan_id()
 
         scanner_kwargs: dict[str, Any] = {}
@@ -270,6 +326,7 @@ class BleState:
             scanner=scanner,
             name_filter=name_filter,
             service_uuid=service_uuid,
+            timeout_s=timeout_s,
         )
         await scanner.start()
         entry.active = True
@@ -289,6 +346,7 @@ class BleState:
         if not entry.active:
             return entry
         entry.active = False
+        entry.ended_ts = time.time()
         if entry._timeout_task and not entry._timeout_task.done():
             entry._timeout_task.cancel()
         try:
@@ -369,5 +427,7 @@ class BleState:
         entry = self.get_connection(connection_id)
         sub = entry.subscriptions.get(subscription_id)
         if sub is None:
-            raise KeyError(f"Unknown subscription_id: {subscription_id}")
+            raise KeyError(
+                f"Unknown subscription_id: {subscription_id}. Call ble.subscriptions.list to see active subscriptions."
+            )
         await self._cancel_subscription(entry, sub)

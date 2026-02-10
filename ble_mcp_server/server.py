@@ -14,7 +14,13 @@ from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from ble_mcp_server import handlers_ble, handlers_plugin, handlers_spec, handlers_trace
+from ble_mcp_server import (
+    handlers_ble,
+    handlers_introspection,
+    handlers_plugin,
+    handlers_spec,
+    handlers_trace,
+)
 from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _result_text
 from ble_mcp_server.plugins import PluginManager, parse_plugin_policy
 from ble_mcp_server.specs import resolve_spec_root
@@ -37,9 +43,16 @@ logger = logging.getLogger("ble_mcp_server")
 # Tool & handler registry (merged from handler modules)
 # ---------------------------------------------------------------------------
 
-TOOLS: list[Tool] = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
+TOOLS: list[Tool] = (
+    handlers_ble.TOOLS
+    + handlers_introspection.TOOLS
+    + handlers_spec.TOOLS
+    + handlers_trace.TOOLS
+    + handlers_plugin.TOOLS
+)
 _HANDLERS: dict[str, Any] = {
     **handlers_ble.HANDLERS,
+    **handlers_introspection.HANDLERS,
     **handlers_spec.HANDLERS,
     **handlers_trace.HANDLERS,
 }
@@ -181,6 +194,11 @@ def build_server() -> tuple[Server, BleState]:
         except Exception as exc:
             logger.error("Unhandled error in %s: %s", name, exc, exc_info=True)
             result = _err("internal", f"Internal error in {name}. Check server logs for details.")
+
+        if result.get("ok") and "connection_id" in arguments:
+            conn = state.connections.get(arguments["connection_id"])
+            if conn:
+                conn.last_seen_ts = time.time()
 
         if buf:
             duration_ms = round((time.monotonic() - t0) * 1000, 1)

@@ -441,6 +441,8 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
             service_uuids = dev_info.get("service_uuids") or None
             break
 
+    entry.name = device_name
+
     return _ok(
         connection_id=entry.connection_id,
         address=address,
@@ -613,7 +615,10 @@ def _validate_subscription(state: BleState, cid: str, sid: str) -> dict[str, Any
     state.require_connected(cid)
     sub = state.subscriptions.get(sid)
     if sub is None:
-        return _err("unknown_subscription", f"Unknown subscription_id: {sid}")
+        return _err(
+            "unknown_subscription",
+            f"Unknown subscription_id: {sid}. Call ble.subscriptions.list to see active subscriptions.",
+        )
     if sub.connection_id != cid:
         return _err("subscription_mismatch", "subscription_id does not belong to this connection_id.")
     return (None, sub)
