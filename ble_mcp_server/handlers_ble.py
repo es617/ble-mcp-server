@@ -596,6 +596,7 @@ async def handle_wait_notification(state: BleState, args: dict[str, Any]) -> dic
 
     try:
         notification = await asyncio.wait_for(sub.queue.get(), timeout=timeout)
+        sub.notified_client = False
         return _ok(notification=notification)
     except asyncio.TimeoutError:
         return _ok(notification=None)
@@ -631,6 +632,7 @@ async def handle_poll_notifications(state: BleState, args: dict[str, Any]) -> di
         except asyncio.QueueEmpty:
             break
 
+    sub.notified_client = False
     return _ok(notifications=notifications, dropped=sub.dropped)
 
 
@@ -672,6 +674,7 @@ async def handle_drain_notifications(state: BleState, args: dict[str, Any]) -> d
         except asyncio.TimeoutError:
             break
 
+    sub.notified_client = False
     return _ok(notifications=notifications, dropped=sub.dropped)
 
 

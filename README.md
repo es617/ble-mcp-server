@@ -268,6 +268,18 @@ The agent handles steps 2–5 automatically after you tell it which device to co
 
 ---
 
+## Try without an agent
+
+You can test the server interactively using the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) — no Claude or other agent needed:
+
+```bash
+npx @modelcontextprotocol/inspector python -m ble_mcp_server
+```
+
+Open the URL with the auth token from the terminal output. The Inspector gives you a web UI to call any tool, see responses, and observe MCP notifications (like disconnect alerts) in real time.
+
+---
+
 ## Architecture
 
 - **stdio MCP transport** — no HTTP, no network ports
@@ -275,6 +287,14 @@ The agent handles steps 2–5 automatically after you tell it which device to co
 - **Safe by default** — writes gated by env flags + allowlist
 - **Agent-friendly** — structured outputs, buffered notifications
 - **Graceful shutdown** — disconnects all clients on exit
+
+---
+
+## Known limitations
+
+- **MCP log notifications are client-dependent.** The server sends MCP `notifications/message` log events for device disconnects and incoming GATT notifications. These work in the MCP Inspector but Claude Code currently does not surface them. The agent will still detect disconnects on the next tool call and can poll for GATT notifications — the log messages are a best-effort heads-up, not a guarantee.
+
+- **Single-client only.** The server captures one MCP session at a time (stdio transport). If multi-client transports (HTTP/SSE) are added later, the notification mechanism will need rework.
 
 ---
 

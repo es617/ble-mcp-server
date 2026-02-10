@@ -55,6 +55,56 @@ def build_server() -> tuple[Server, BleState]:
     state = BleState()
     server = Server("ble-mcp-server")
 
+    # --- Disconnect notification via MCP log message ---
+    _session = None
+
+    async def _notify_disconnect(address: str, connection_id: str) -> None:
+        buf = get_trace_buffer()
+        if _session is None:
+            if buf:
+                buf.emit({"event": "disconnect_notify_skipped", "reason": "no_session",
+                          "address": address, "connection_id": connection_id})
+            return
+        try:
+            await _session.send_log_message(
+                level="warning",
+                data=f"Device {address} ({connection_id}) disconnected unexpectedly",
+                logger="ble_mcp_server",
+            )
+            if buf:
+                buf.emit({"event": "disconnect_notify_sent", "address": address, "connection_id": connection_id})
+        except Exception as exc:
+            if buf:
+                buf.emit({"event": "disconnect_notify_failed", "address": address,
+                          "connection_id": connection_id, "error": str(exc)})
+
+    state.on_disconnect_cb = _notify_disconnect
+
+    # --- GATT notification alert via MCP log message ---
+
+    async def _notify_gatt(subscription_id: str, connection_id: str, char_uuid: str) -> None:
+        buf = get_trace_buffer()
+        if _session is None:
+            if buf:
+                buf.emit({"event": "notification_alert_skipped", "reason": "no_session",
+                          "subscription_id": subscription_id, "connection_id": connection_id})
+            return
+        try:
+            await _session.send_log_message(
+                level="info",
+                data=f"Notification available on {char_uuid} (subscription {subscription_id}, connection {connection_id})",
+                logger="ble_mcp_server",
+            )
+            if buf:
+                buf.emit({"event": "notification_alert_sent", "subscription_id": subscription_id,
+                          "connection_id": connection_id, "char_uuid": char_uuid})
+        except Exception as exc:
+            if buf:
+                buf.emit({"event": "notification_alert_failed", "subscription_id": subscription_id,
+                          "connection_id": connection_id, "error": str(exc)})
+
+    state.on_notification_cb = _notify_gatt
+
     # --- Plugin system ---
     plugins_dir = resolve_spec_root() / "plugins"
     plugins_enabled, plugins_allowlist = parse_plugin_policy()
@@ -71,6 +121,8 @@ def build_server() -> tuple[Server, BleState]:
 
     @server.call_tool()
     async def _call_tool(name: str, arguments: dict[str, Any] | None) -> list[TextContent]:
+        nonlocal _session
+        _session = server.request_context.session
         arguments = arguments or {}
 
         buf = get_trace_buffer()

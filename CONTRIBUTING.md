@@ -96,6 +96,22 @@ Tool names follow the convention `ble.<category>.<action>` (e.g., `ble.spec.read
 
 **Limitation:** MCP clients may not refresh their tool list mid-session. Newly loaded plugins may require a client restart to call their tools. Hot-reload of existing plugins works without restart.
 
+## MCP Inspector
+
+The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) lets you call tools and see MCP notifications without an agent:
+
+```bash
+npx @modelcontextprotocol/inspector python -m ble_mcp_server
+```
+
+Open the URL with the auth token printed in the terminal. In the web UI:
+
+- **Command**: `python`, **Arguments**: `-m ble_mcp_server`
+- Use the **Tools** tab to call any tool interactively
+- The **Notifications** panel shows MCP log messages (disconnect alerts, GATT notification alerts) in real time
+
+This is the easiest way to verify that MCP notifications are actually being sent. Claude Code does not surface these log messages, so the Inspector is the primary debugging tool for notification-related work.
+
 ## Tests
 
 All tests run without BLE hardware. They use `tmp_path` fixtures for filesystem isolation and `monkeypatch` for environment variables.

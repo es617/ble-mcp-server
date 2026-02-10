@@ -1,5 +1,6 @@
 """Unit tests for pure-python helpers in ble_mcp_server.state."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -123,3 +124,68 @@ class TestNotificationQueueOverflow:
         callback(None, bytearray([0x01]))
 
         assert sub.queue.empty()
+
+
+# ---------------------------------------------------------------------------
+# on_disconnect_cb
+# ---------------------------------------------------------------------------
+
+
+class TestOnDisconnectCallback:
+    """Verify the on_disconnect_cb fires when a device disconnects."""
+
+    async def test_callback_invoked_with_address_and_cid(self, monkeypatch):
+        state = BleState()
+        cb = AsyncMock()
+        state.on_disconnect_cb = cb
+
+        # Capture the disconnected_callback kwarg passed to BleakClient
+        captured_disconnect_cb = None
+
+        def fake_bleak_client(address, **kwargs):
+            nonlocal captured_disconnect_cb
+            captured_disconnect_cb = kwargs.get("disconnected_callback")
+            client = MagicMock()
+            client.is_connected = True
+            return client
+
+        monkeypatch.setattr("ble_mcp_server.state.BleakClient", fake_bleak_client)
+
+        entry = state.create_client("AA:BB:CC:DD:EE:FF", timeout=10.0)
+        cid = entry.connection_id
+        state.register_connection(entry)
+
+        assert captured_disconnect_cb is not None
+        captured_disconnect_cb(entry.client)
+
+        # call_soon_threadsafe + create_task needs two event loop iterations
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+
+        cb.assert_awaited_once_with("AA:BB:CC:DD:EE:FF", cid)
+        assert entry.disconnected is True
+        assert entry.disconnect_ts is not None
+
+    async def test_no_callback_when_not_set(self, monkeypatch):
+        state = BleState()
+        # on_disconnect_cb is None by default
+
+        captured_disconnect_cb = None
+
+        def fake_bleak_client(address, **kwargs):
+            nonlocal captured_disconnect_cb
+            captured_disconnect_cb = kwargs.get("disconnected_callback")
+            client = MagicMock()
+            client.is_connected = True
+            return client
+
+        monkeypatch.setattr("ble_mcp_server.state.BleakClient", fake_bleak_client)
+
+        entry = state.create_client("AA:BB:CC:DD:EE:FF", timeout=10.0)
+        state.register_connection(entry)
+
+        # Should not raise even without a callback
+        assert captured_disconnect_cb is not None
+        captured_disconnect_cb(entry.client)
+
+        assert entry.disconnected is True

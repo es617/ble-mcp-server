@@ -347,3 +347,16 @@ Load a new plugin from a file or directory path. The path must be inside `.ble_m
 ```
 
 Returns `{ "ok": true, "name": "sensortag", "tools": ["sensortag.read_temp"], "notified": true, "hint": "Plugin loaded on the server. The client may need a restart to call the new tools." }`.
+
+---
+
+## MCP log notifications
+
+The server sends MCP `notifications/message` log events to proactively alert the client. These are not tool calls — they are asynchronous messages sent outside the request/response cycle.
+
+| Event | Level | When |
+|---|---|---|
+| Device disconnect | `warning` | A connected BLE device disconnects unexpectedly |
+| Notification available | `info` | First GATT notification arrives on a subscription since the last `ble.drain_notifications`, `ble.poll_notifications`, or `ble.wait_notification` |
+
+These are best-effort and fire-and-forget. The server's internal state (connection status, notification queue) is always the source of truth. Not all MCP clients surface log notifications — Claude Code currently ignores them. The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) shows them in real time and is useful for verifying the behavior.

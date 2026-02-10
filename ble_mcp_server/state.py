@@ -68,6 +68,9 @@ class Subscription:
     _stop_event: asyncio.Event = field(default_factory=asyncio.Event)
     active: bool = True
     dropped: int = 0
+    # True after the MCP client has been notified that data is available.
+    # Reset by drain/poll/wait so the next notification triggers a new alert.
+    notified_client: bool = False
 
 
 @dataclass
@@ -105,6 +108,10 @@ class BleState:
         # subscription_id -> Subscription (flat index for fast lookup)
         self.subscriptions: dict[str, Subscription] = {}
         self.scans: dict[str, ScanEntry] = {}
+        # Optional async callback fired on unexpected disconnect: (address, connection_id) -> None
+        self.on_disconnect_cb: Any | None = None
+        # Optional async callback fired on first buffered notification: (subscription_id, connection_id, char_uuid) -> None
+        self.on_notification_cb: Any | None = None
 
     # -- helpers -------------------------------------------------------------
 
@@ -167,6 +174,15 @@ class BleState:
                     sub._stop_event.set()
                     self.subscriptions.pop(sub.subscription_id, None)
                 entry.subscriptions.clear()
+                # Best-effort MCP notification — state remains source of truth.
+                if self.on_disconnect_cb is not None:
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.call_soon_threadsafe(
+                            loop.create_task, self.on_disconnect_cb(address, cid),
+                        )
+                    except Exception:
+                        logger.debug("Failed to schedule disconnect notification", exc_info=True)
 
         kwargs: dict[str, Any] = {
             "timeout": timeout,
@@ -338,6 +354,15 @@ class BleState:
                     pass
                 sub.queue.put_nowait(notification)
                 sub.dropped += 1
+            if not sub.notified_client and self.on_notification_cb is not None:
+                sub.notified_client = True
+                try:
+                    loop = asyncio.get_running_loop()
+                    loop.call_soon_threadsafe(
+                        loop.create_task, self.on_notification_cb(sub.subscription_id, sub.connection_id, sub.char_uuid),
+                    )
+                except Exception:
+                    logger.debug("Failed to schedule notification alert", exc_info=True)
 
         await entry.client.start_notify(char_uuid, _callback)
         entry.subscriptions[sid] = sub
