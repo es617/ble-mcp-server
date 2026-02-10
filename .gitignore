@@ -7,5 +7,6 @@ build/
 *.egg
 .pytest_cache/
 .venv/
+ble_mcp_server/_version.py
 .ble_mcp/index.json
 .ble_mcp/traces/
