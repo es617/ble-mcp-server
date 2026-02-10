@@ -15,6 +15,12 @@ dependencies = [
     "pyyaml>=6.0,<7",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
 [project.scripts]
 ble_mcp = "ble_mcp_server.server:main"
 
@@ -42,3 +48,7 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["ble_mcp_server"]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B110"]  # try-except-pass is intentional for best-effort BLE cleanup
