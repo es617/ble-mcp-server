@@ -18,8 +18,7 @@ TOOLS: list[Tool] = [
     Tool(
         name="ble.spec.template",
         description=(
-            "Return a markdown template for a new BLE protocol spec. "
-            "Optionally pre-fill with a device name."
+            "Return a markdown template for a new BLE protocol spec. Optionally pre-fill with a device name."
         ),
         inputSchema={
             "type": "object",

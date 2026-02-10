@@ -21,3 +21,24 @@ ble_mcp = "ble_mcp_server.server:main"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "E501",    # line length handled by formatter
+    "SIM105",  # contextlib.suppress is less readable for async cleanup
+    "RUF001",  # en-dash in strings is intentional
+    "RUF002",  # en-dash in docstrings is intentional
+    "RUF003",  # en-dash in comments is intentional
+    "RUF006",  # fire-and-forget create_task is intentional in signal handlers
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["RUF059"]  # unused unpacked vars in tests are fine
+
+[tool.ruff.lint.isort]
+known-first-party = ["ble_mcp_server"]

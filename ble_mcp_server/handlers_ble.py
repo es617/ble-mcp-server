@@ -10,7 +10,7 @@ from typing import Any
 from mcp.types import Tool
 
 from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _ok, _retry
-from ble_mcp_server.state import BleState, check_allowlist, normalize_uuid
+from ble_mcp_server.state import BleState, Subscription, check_allowlist, normalize_uuid
 
 logger = logging.getLogger("ble_mcp_server")
 
@@ -165,8 +165,7 @@ TOOLS: list[Tool] = [
     Tool(
         name="ble.discover",
         description=(
-            "Discover services and characteristics on a connected device. "
-            "Results are cached per connection."
+            "Discover services and characteristics on a connected device. Results are cached per connection."
         ),
         inputSchema={
             "type": "object",
@@ -408,7 +407,7 @@ async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any
     # Hard outer deadline — bleak's timeout is unreliable on some platforms
     try:
         await asyncio.wait_for(_retry(_do_connect), timeout=timeout + 5)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         try:
             await client.disconnect()
         except Exception:
@@ -489,10 +488,12 @@ async def handle_discover(state: BleState, args: dict[str, Any]) -> dict[str, An
             if descs:
                 char_info["descriptors"] = descs
             chars.append(char_info)
-        services_snapshot.append({
-            "uuid": svc.uuid,
-            "characteristics": chars,
-        })
+        services_snapshot.append(
+            {
+                "uuid": svc.uuid,
+                "characteristics": chars,
+            }
+        )
 
     entry.discovered_services = services_snapshot
     return _ok(services=services_snapshot)
@@ -521,7 +522,9 @@ async def handle_read(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
 
 async def handle_write(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     if not ALLOW_WRITES:
-        return _err("writes_disabled", "Writes are disabled. Start the server with BLE_MCP_ALLOW_WRITES=true.")
+        return _err(
+            "writes_disabled", "Writes are disabled. Start the server with BLE_MCP_ALLOW_WRITES=true."
+        )
 
     char_uuid = normalize_uuid(args["char_uuid"])
     if not check_allowlist(char_uuid, WRITE_ALLOWLIST):
@@ -555,7 +558,9 @@ async def handle_read_descriptor(state: BleState, args: dict[str, Any]) -> dict[
 
 async def handle_write_descriptor(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     if not ALLOW_WRITES:
-        return _err("writes_disabled", "Writes are disabled. Start the server with BLE_MCP_ALLOW_WRITES=true.")
+        return _err(
+            "writes_disabled", "Writes are disabled. Start the server with BLE_MCP_ALLOW_WRITES=true."
+        )
     cid = args["connection_id"]
     handle = int(args["handle"])
     entry = state.require_connected(cid)
@@ -598,13 +603,12 @@ async def handle_wait_notification(state: BleState, args: dict[str, Any]) -> dic
         notification = await asyncio.wait_for(sub.queue.get(), timeout=timeout)
         sub.notified_client = False
         return _ok(notification=notification)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return _ok(notification=None)
 
 
-def _validate_subscription(state: BleState, cid: str, sid: str) -> dict[str, Any] | tuple[None, "Subscription"]:
+def _validate_subscription(state: BleState, cid: str, sid: str) -> dict[str, Any] | tuple[None, Subscription]:
     """Validate connection + subscription. Returns error dict or (None, sub)."""
-    from ble_mcp_server.state import Subscription  # noqa: F811 (for type hint only)
 
     state.require_connected(cid)
     sub = state.subscriptions.get(sid)
@@ -659,7 +663,7 @@ async def handle_drain_notifications(state: BleState, args: dict[str, Any]) -> d
     try:
         first = await asyncio.wait_for(sub.queue.get(), timeout=remaining)
         notifications.append(first)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return _ok(notifications=notifications, dropped=sub.dropped)
 
     # Collect subsequent notifications with idle_timeout, respecting the overall deadline
@@ -671,7 +675,7 @@ async def handle_drain_notifications(state: BleState, args: dict[str, Any]) -> d
         try:
             item = await asyncio.wait_for(sub.queue.get(), timeout=wait)
             notifications.append(item)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             break
 
     sub.notified_client = False

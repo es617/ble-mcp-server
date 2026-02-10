@@ -469,10 +469,13 @@ class TestSpecHandlers:
         conn = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
         state.connections["c1"] = conn
 
-        result = await handle_spec_attach(state, {
-            "connection_id": "c1",
-            "spec_id": entry_data["spec_id"],
-        })
+        result = await handle_spec_attach(
+            state,
+            {
+                "connection_id": "c1",
+                "spec_id": entry_data["spec_id"],
+            },
+        )
         assert result["ok"] is True
         assert result["spec_id"] == entry_data["spec_id"]
         assert conn.spec is not None
@@ -488,10 +491,13 @@ class TestSpecHandlers:
         conn = ConnectionEntry(connection_id="c1", address="AA:BB", client=mock_client)
         state.connections["c1"] = conn
 
-        result = await handle_spec_attach(state, {
-            "connection_id": "c1",
-            "spec_id": "nonexistent",
-        })
+        result = await handle_spec_attach(
+            state,
+            {
+                "connection_id": "c1",
+                "spec_id": "nonexistent",
+            },
+        )
         assert result["ok"] is False
         assert result["error"]["code"] == "not_found"
 
@@ -501,10 +507,13 @@ class TestSpecHandlers:
 
         state = BleState()
         with pytest.raises(KeyError, match="Unknown connection_id"):
-            await handle_spec_attach(state, {
-                "connection_id": "nope",
-                "spec_id": "anything",
-            })
+            await handle_spec_attach(
+                state,
+                {
+                    "connection_id": "nope",
+                    "spec_id": "anything",
+                },
+            )
 
     async def test_get_returns_attached_spec(self, monkeypatch, tmp_path):
         _setup_env(monkeypatch, tmp_path)
@@ -565,10 +574,13 @@ class TestSpecHandlers:
         entry_data = register_spec(spec_file)
 
         state = BleState()
-        result = await handle_spec_search(state, {
-            "spec_id": entry_data["spec_id"],
-            "query": "sensor",
-        })
+        result = await handle_spec_search(
+            state,
+            {
+                "spec_id": entry_data["spec_id"],
+                "query": "sensor",
+            },
+        )
         assert result["ok"] is True
         assert result["count"] > 0
         assert len(result["results"]) > 0
@@ -581,9 +593,12 @@ class TestSpecHandlers:
         entry_data = register_spec(spec_file)
 
         state = BleState()
-        result = await handle_spec_search(state, {
-            "spec_id": entry_data["spec_id"],
-            "query": "zzzznonexistent",
-        })
+        result = await handle_spec_search(
+            state,
+            {
+                "spec_id": entry_data["spec_id"],
+                "query": "zzzznonexistent",
+            },
+        )
         assert result["ok"] is True
         assert result["count"] == 0

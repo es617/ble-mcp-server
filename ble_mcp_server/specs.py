@@ -120,7 +120,7 @@ def parse_frontmatter(content: str) -> tuple[dict[str, Any], str]:
         return {}, content
 
     yaml_text = match.group(1)
-    body = content[match.end():]
+    body = content[match.end() :]
 
     try:
         meta = yaml.safe_load(yaml_text)
@@ -187,10 +187,7 @@ def register_spec(path: str | Path) -> dict[str, Any]:
 
     project = _project_root()
     if project not in file_path.parents and file_path != project:
-        raise ValueError(
-            f"Spec path must be inside the project directory ({project}) — "
-            f"got {path}"
-        )
+        raise ValueError(f"Spec path must be inside the project directory ({project}) — got {path}")
 
     if not file_path.exists():
         raise FileNotFoundError(f"Spec file not found: {file_path}")
@@ -290,12 +287,14 @@ def search_spec(spec_id: str, query: str, k: int = 10) -> list[dict[str, Any]]:
             if 0 <= idx < len(lines):
                 context_lines.append(f"{idx + 1}: {lines[idx]}")
 
-        results.append({
-            "line": line_num,
-            "text": line,
-            "score": score,
-            "context": "\n".join(context_lines),
-        })
+        results.append(
+            {
+                "line": line_num,
+                "text": line,
+                "score": score,
+                "context": "\n".join(context_lines),
+            }
+        )
 
     return results
 
@@ -316,7 +315,7 @@ def suggest_spec_path(device_name: str | None = None) -> Path:
 
 def get_template(device_name: str | None = None) -> str:
     """Return a pre-filled markdown template for a new spec."""
-    name_line = f"name: \"{device_name} Protocol\"" if device_name else 'name: "My Device Protocol"'
+    name_line = f'name: "{device_name} Protocol"' if device_name else 'name: "My Device Protocol"'
 
     return f"""---
 kind: ble-protocol

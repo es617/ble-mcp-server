@@ -29,7 +29,6 @@ from ble_mcp_server.handlers_ble import (
 )
 from ble_mcp_server.state import BleState, ConnectionEntry, ScanEntry, Subscription
 
-
 # ---------------------------------------------------------------------------
 # Scan handlers
 # ---------------------------------------------------------------------------
@@ -138,10 +137,13 @@ class TestConnect:
         mock_client.disconnect = AsyncMock()
 
         with patch("ble_mcp_server.state.BleakClient", return_value=mock_client):
-            result = await handle_connect(state, {
-                "address": "AA:BB:CC:DD:EE:FF",
-                "timeout_s": 5,
-            })
+            result = await handle_connect(
+                state,
+                {
+                    "address": "AA:BB:CC:DD:EE:FF",
+                    "timeout_s": 5,
+                },
+            )
 
         assert result["ok"] is True
         assert "connection_id" in result
@@ -156,10 +158,13 @@ class TestConnect:
         mock_client.disconnect = AsyncMock()
 
         with patch("ble_mcp_server.state.BleakClient", return_value=mock_client):
-            result = await handle_connect(state, {
-                "address": "AA:BB:CC:DD:EE:FF",
-                "timeout_s": 1,
-            })
+            result = await handle_connect(
+                state,
+                {
+                    "address": "AA:BB:CC:DD:EE:FF",
+                    "timeout_s": 1,
+                },
+            )
 
         assert result["ok"] is False
         assert result["error"]["code"] == "timeout"
@@ -172,9 +177,12 @@ class TestConnect:
         mock_client.disconnect = AsyncMock()
 
         with patch("ble_mcp_server.state.BleakClient", return_value=mock_client):
-            result = await handle_connect(state, {
-                "address": "AA:BB:CC:DD:EE:FF",
-            })
+            result = await handle_connect(
+                state,
+                {
+                    "address": "AA:BB:CC:DD:EE:FF",
+                },
+            )
 
         assert result["ok"] is False
         assert result["error"]["code"] == "connect_failed"
@@ -196,9 +204,12 @@ class TestConnect:
         mock_client.disconnect = AsyncMock()
 
         with patch("ble_mcp_server.state.BleakClient", return_value=mock_client):
-            result = await handle_connect(state, {
-                "address": "AA:BB:CC:DD:EE:FF",
-            })
+            result = await handle_connect(
+                state,
+                {
+                    "address": "AA:BB:CC:DD:EE:FF",
+                },
+            )
 
         assert result["ok"] is True
         assert result["device_name"] == "MySensor"
@@ -213,10 +224,13 @@ class TestConnect:
 
         with patch("ble_mcp_server.state.BleakClient", return_value=mock_client):
             # Very low timeout should be clamped to 1
-            result = await handle_connect(state, {
-                "address": "AA:BB:CC:DD:EE:FF",
-                "timeout_s": 0.01,
-            })
+            result = await handle_connect(
+                state,
+                {
+                    "address": "AA:BB:CC:DD:EE:FF",
+                    "timeout_s": 0.01,
+                },
+            )
 
         assert result["ok"] is True
 
@@ -344,10 +358,13 @@ class TestRead:
         state, entry = connected_entry
         entry.client.read_gatt_char = AsyncMock(return_value=bytearray(b"\x01\x02\x03"))
 
-        result = await handle_read(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-        })
+        result = await handle_read(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+            },
+        )
 
         assert result["ok"] is True
         assert result["value_b64"] == base64.b64encode(b"\x01\x02\x03").decode()
@@ -367,11 +384,14 @@ class TestWrite:
     async def test_success_hex(self, connected_entry, enable_writes):
         state, entry = connected_entry
 
-        result = await handle_write(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-            "value_hex": "0102",
-        })
+        result = await handle_write(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+                "value_hex": "0102",
+            },
+        )
 
         assert result["ok"] is True
         entry.client.write_gatt_char.assert_called()
@@ -379,11 +399,14 @@ class TestWrite:
     async def test_success_b64(self, connected_entry, enable_writes):
         state, entry = connected_entry
 
-        result = await handle_write(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-            "value_b64": base64.b64encode(b"\x01\x02").decode(),
-        })
+        result = await handle_write(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+                "value_b64": base64.b64encode(b"\x01\x02").decode(),
+            },
+        )
 
         assert result["ok"] is True
 
@@ -395,11 +418,14 @@ class TestWrite:
         try:
             srv.ALLOW_WRITES = False
             state, _ = connected_entry
-            result = await handle_write(state, {
-                "connection_id": "c1",
-                "char_uuid": "2a00",
-                "value_hex": "01",
-            })
+            result = await handle_write(
+                state,
+                {
+                    "connection_id": "c1",
+                    "char_uuid": "2a00",
+                    "value_hex": "01",
+                },
+            )
             assert result["ok"] is False
             assert result["error"]["code"] == "writes_disabled"
         finally:
@@ -407,30 +433,39 @@ class TestWrite:
 
     async def test_invalid_b64(self, connected_entry, enable_writes):
         state, _ = connected_entry
-        result = await handle_write(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-            "value_b64": "not-valid-b64!!!",
-        })
+        result = await handle_write(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+                "value_b64": "not-valid-b64!!!",
+            },
+        )
         assert result["ok"] is False
         assert result["error"]["code"] == "invalid_value"
 
     async def test_invalid_hex(self, connected_entry, enable_writes):
         state, _ = connected_entry
-        result = await handle_write(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-            "value_hex": "ZZZZ",
-        })
+        result = await handle_write(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+                "value_hex": "ZZZZ",
+            },
+        )
         assert result["ok"] is False
         assert result["error"]["code"] == "invalid_value"
 
     async def test_missing_value(self, connected_entry, enable_writes):
         state, _ = connected_entry
-        result = await handle_write(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-        })
+        result = await handle_write(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+            },
+        )
         assert result["ok"] is False
         assert result["error"]["code"] == "missing_value"
 
@@ -438,15 +473,18 @@ class TestWrite:
 class TestReadDescriptor:
     async def test_success(self, connected_entry):
         state, entry = connected_entry
-        entry.client.read_gatt_descriptor = AsyncMock(return_value=bytearray(b"\xAA\xBB"))
+        entry.client.read_gatt_descriptor = AsyncMock(return_value=bytearray(b"\xaa\xbb"))
 
-        result = await handle_read_descriptor(state, {
-            "connection_id": "c1",
-            "handle": 42,
-        })
+        result = await handle_read_descriptor(
+            state,
+            {
+                "connection_id": "c1",
+                "handle": 42,
+            },
+        )
 
         assert result["ok"] is True
-        assert result["value_b64"] == base64.b64encode(b"\xAA\xBB").decode()
+        assert result["value_b64"] == base64.b64encode(b"\xaa\xbb").decode()
         assert result["value_hex"] == "aabb"
         assert result["value_len"] == 2
 
@@ -454,11 +492,14 @@ class TestReadDescriptor:
 class TestWriteDescriptor:
     async def test_success(self, connected_entry, enable_writes):
         state, entry = connected_entry
-        result = await handle_write_descriptor(state, {
-            "connection_id": "c1",
-            "handle": 42,
-            "value_hex": "0100",
-        })
+        result = await handle_write_descriptor(
+            state,
+            {
+                "connection_id": "c1",
+                "handle": 42,
+                "value_hex": "0100",
+            },
+        )
         assert result["ok"] is True
         entry.client.write_gatt_descriptor.assert_called()
 
@@ -469,11 +510,14 @@ class TestWriteDescriptor:
         try:
             srv.ALLOW_WRITES = False
             state, _ = connected_entry
-            result = await handle_write_descriptor(state, {
-                "connection_id": "c1",
-                "handle": 42,
-                "value_hex": "0100",
-            })
+            result = await handle_write_descriptor(
+                state,
+                {
+                    "connection_id": "c1",
+                    "handle": 42,
+                    "value_hex": "0100",
+                },
+            )
             assert result["ok"] is False
             assert result["error"]["code"] == "writes_disabled"
         finally:
@@ -481,11 +525,14 @@ class TestWriteDescriptor:
 
     async def test_invalid_value(self, connected_entry, enable_writes):
         state, _ = connected_entry
-        result = await handle_write_descriptor(state, {
-            "connection_id": "c1",
-            "handle": 42,
-            "value_hex": "ZZZZ",
-        })
+        result = await handle_write_descriptor(
+            state,
+            {
+                "connection_id": "c1",
+                "handle": 42,
+                "value_hex": "ZZZZ",
+            },
+        )
         assert result["ok"] is False
         assert result["error"]["code"] == "invalid_value"
 
@@ -499,10 +546,13 @@ class TestSubscribe:
     async def test_success(self, connected_entry):
         state, entry = connected_entry
 
-        result = await handle_subscribe(state, {
-            "connection_id": "c1",
-            "char_uuid": "2a00",
-        })
+        result = await handle_subscribe(
+            state,
+            {
+                "connection_id": "c1",
+                "char_uuid": "2a00",
+            },
+        )
 
         assert result["ok"] is True
         assert "subscription_id" in result
@@ -522,10 +572,13 @@ class TestUnsubscribe:
         entry.subscriptions["sub1"] = sub
         state.subscriptions["sub1"] = sub
 
-        result = await handle_unsubscribe(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-        })
+        result = await handle_unsubscribe(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+            },
+        )
 
         assert result["ok"] is True
         assert "sub1" not in state.subscriptions
@@ -533,10 +586,13 @@ class TestUnsubscribe:
     async def test_unknown_subscription(self, connected_entry):
         state, _ = connected_entry
         with pytest.raises(KeyError, match="Unknown subscription_id"):
-            await handle_unsubscribe(state, {
-                "connection_id": "c1",
-                "subscription_id": "nope",
-            })
+            await handle_unsubscribe(
+                state,
+                {
+                    "connection_id": "c1",
+                    "subscription_id": "nope",
+                },
+            )
 
 
 class TestWaitNotification:
@@ -554,11 +610,14 @@ class TestWaitNotification:
         notification = {"value_b64": "AQID", "value_hex": "010203", "ts": 1.0}
         await sub.queue.put(notification)
 
-        result = await handle_wait_notification(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-            "timeout_s": 1,
-        })
+        result = await handle_wait_notification(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+                "timeout_s": 1,
+            },
+        )
 
         assert result["ok"] is True
         assert result["notification"] == notification
@@ -573,11 +632,14 @@ class TestWaitNotification:
         entry.subscriptions["sub1"] = sub
         state.subscriptions["sub1"] = sub
 
-        result = await handle_wait_notification(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-            "timeout_s": 0.1,
-        })
+        result = await handle_wait_notification(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+                "timeout_s": 0.1,
+            },
+        )
 
         assert result["ok"] is True
         assert result["notification"] is None
@@ -592,10 +654,13 @@ class TestWaitNotification:
         )
         state.subscriptions["sub1"] = sub
 
-        result = await handle_wait_notification(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-        })
+        result = await handle_wait_notification(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+            },
+        )
 
         assert result["ok"] is False
         assert result["error"]["code"] == "subscription_mismatch"
@@ -615,10 +680,13 @@ class TestPollNotifications:
         for i in range(3):
             await sub.queue.put({"value_hex": f"0{i}", "ts": float(i)})
 
-        result = await handle_poll_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-        })
+        result = await handle_poll_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+            },
+        )
 
         assert result["ok"] is True
         assert len(result["notifications"]) == 3
@@ -634,10 +702,13 @@ class TestPollNotifications:
         entry.subscriptions["sub1"] = sub
         state.subscriptions["sub1"] = sub
 
-        result = await handle_poll_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-        })
+        result = await handle_poll_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+            },
+        )
 
         assert result["ok"] is True
         assert result["notifications"] == []
@@ -656,11 +727,14 @@ class TestPollNotifications:
         for i in range(10):
             await sub.queue.put({"value_hex": f"0{i}", "ts": float(i)})
 
-        result = await handle_poll_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-            "max_items": 2,
-        })
+        result = await handle_poll_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+                "max_items": 2,
+            },
+        )
 
         assert result["ok"] is True
         assert len(result["notifications"]) == 2
@@ -676,10 +750,13 @@ class TestPollNotifications:
         entry.subscriptions["sub1"] = sub
         state.subscriptions["sub1"] = sub
 
-        result = await handle_poll_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-        })
+        result = await handle_poll_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+            },
+        )
 
         assert result["dropped"] == 5
 
@@ -699,12 +776,15 @@ class TestDrainNotifications:
         for i in range(5):
             await sub.queue.put({"value_hex": f"0{i}", "ts": float(i)})
 
-        result = await handle_drain_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-            "timeout_s": 1,
-            "idle_timeout_s": 0.1,
-        })
+        result = await handle_drain_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+                "timeout_s": 1,
+                "idle_timeout_s": 0.1,
+            },
+        )
 
         assert result["ok"] is True
         assert len(result["notifications"]) == 5
@@ -719,12 +799,15 @@ class TestDrainNotifications:
         entry.subscriptions["sub1"] = sub
         state.subscriptions["sub1"] = sub
 
-        result = await handle_drain_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-            "timeout_s": 0.1,
-            "idle_timeout_s": 0.05,
-        })
+        result = await handle_drain_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+                "timeout_s": 0.1,
+                "idle_timeout_s": 0.05,
+            },
+        )
 
         assert result["ok"] is True
         assert result["notifications"] == []
@@ -742,12 +825,15 @@ class TestDrainNotifications:
         # Put one notification; idle timeout should stop collecting after it
         await sub.queue.put({"value_hex": "01", "ts": 1.0})
 
-        result = await handle_drain_notifications(state, {
-            "connection_id": "c1",
-            "subscription_id": "sub1",
-            "timeout_s": 5,
-            "idle_timeout_s": 0.05,
-        })
+        result = await handle_drain_notifications(
+            state,
+            {
+                "connection_id": "c1",
+                "subscription_id": "sub1",
+                "timeout_s": 5,
+                "idle_timeout_s": 0.05,
+            },
+        )
 
         assert result["ok"] is True
         assert len(result["notifications"]) == 1
@@ -763,39 +849,42 @@ class TestConnectionLossMidOperation:
 
     async def test_read_raises_on_disconnect(self, connected_entry):
         state, entry = connected_entry
-        entry.client.read_gatt_char = AsyncMock(
-            side_effect=Exception("Device disconnected unexpectedly")
-        )
+        entry.client.read_gatt_char = AsyncMock(side_effect=Exception("Device disconnected unexpectedly"))
 
         with pytest.raises(Exception, match="disconnected"):
-            await handle_read(state, {
-                "connection_id": "c1",
-                "char_uuid": "2a00",
-            })
+            await handle_read(
+                state,
+                {
+                    "connection_id": "c1",
+                    "char_uuid": "2a00",
+                },
+            )
 
     async def test_write_raises_on_disconnect(self, connected_entry, enable_writes):
         state, entry = connected_entry
-        entry.client.write_gatt_char = AsyncMock(
-            side_effect=Exception("Device disconnected unexpectedly")
-        )
+        entry.client.write_gatt_char = AsyncMock(side_effect=Exception("Device disconnected unexpectedly"))
 
         # _retry will retry on "disconnect" errors, then raise after exhausting retries
         with pytest.raises(Exception, match="disconnected"):
-            await handle_write(state, {
-                "connection_id": "c1",
-                "char_uuid": "2a00",
-                "value_hex": "01",
-            })
+            await handle_write(
+                state,
+                {
+                    "connection_id": "c1",
+                    "char_uuid": "2a00",
+                    "value_hex": "01",
+                },
+            )
 
     async def test_subscribe_raises_on_disconnect(self, connected_entry):
         state, entry = connected_entry
-        entry.client.start_notify = AsyncMock(
-            side_effect=Exception("Device disconnected unexpectedly")
-        )
+        entry.client.start_notify = AsyncMock(side_effect=Exception("Device disconnected unexpectedly"))
 
         # _retry retries transient "disconnect" errors, then re-raises
         with pytest.raises(Exception, match="disconnected"):
-            await handle_subscribe(state, {
-                "connection_id": "c1",
-                "char_uuid": "2a00",
-            })
+            await handle_subscribe(
+                state,
+                {
+                    "connection_id": "c1",
+                    "char_uuid": "2a00",
+                },
+            )

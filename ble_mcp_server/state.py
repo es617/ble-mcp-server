@@ -129,14 +129,14 @@ class BleState:
         try:
             return self.scans[scan_id]
         except KeyError:
-            raise KeyError(f"Unknown scan_id: {scan_id}")
+            raise KeyError(f"Unknown scan_id: {scan_id}") from None
 
     def get_connection(self, connection_id: str) -> ConnectionEntry:
         """Raise ``KeyError`` when the connection does not exist."""
         try:
             return self.connections[connection_id]
         except KeyError:
-            raise KeyError(f"Unknown connection_id: {connection_id}")
+            raise KeyError(f"Unknown connection_id: {connection_id}") from None
 
     def require_connected(self, connection_id: str) -> ConnectionEntry:
         """Get a connection and verify it's still alive. Raises ``ConnectionError``."""
@@ -145,9 +145,7 @@ class BleState:
             if not entry.disconnected:
                 entry.disconnected = True
                 entry.disconnect_ts = time.time()
-            raise ConnectionError(
-                f"Device {entry.address} ({connection_id}) is disconnected"
-            )
+            raise ConnectionError(f"Device {entry.address} ({connection_id}) is disconnected")
         return entry
 
     # -- lifecycle -----------------------------------------------------------
@@ -179,7 +177,8 @@ class BleState:
                     try:
                         loop = asyncio.get_running_loop()
                         loop.call_soon_threadsafe(
-                            loop.create_task, self.on_disconnect_cb(address, cid),
+                            loop.create_task,
+                            self.on_disconnect_cb(address, cid),
                         )
                     except Exception:
                         logger.debug("Failed to schedule disconnect notification", exc_info=True)
@@ -256,14 +255,10 @@ class BleState:
                 info["service_uuids"] = list(adv.service_uuids)
             if adv.manufacturer_data:
                 info["manufacturer_data"] = {
-                    str(company_id): bytes(data).hex()
-                    for company_id, data in adv.manufacturer_data.items()
+                    str(company_id): bytes(data).hex() for company_id, data in adv.manufacturer_data.items()
                 }
             if adv.service_data:
-                info["service_data"] = {
-                    uuid: bytes(data).hex()
-                    for uuid, data in adv.service_data.items()
-                }
+                info["service_data"] = {uuid: bytes(data).hex() for uuid, data in adv.service_data.items()}
             entry.devices[device.address] = info
 
         scanner = BleakScanner(
@@ -359,7 +354,8 @@ class BleState:
                 try:
                     loop = asyncio.get_running_loop()
                     loop.call_soon_threadsafe(
-                        loop.create_task, self.on_notification_cb(sub.subscription_id, sub.connection_id, sub.char_uuid),
+                        loop.create_task,
+                        self.on_notification_cb(sub.subscription_id, sub.connection_id, sub.char_uuid),
                     )
                 except Exception:
                     logger.debug("Failed to schedule notification alert", exc_info=True)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -27,7 +27,7 @@ def mock_client():
     client.disconnect = AsyncMock()
     client.read_gatt_char = AsyncMock(return_value=bytearray(b"\x01\x02\x03"))
     client.write_gatt_char = AsyncMock()
-    client.read_gatt_descriptor = AsyncMock(return_value=bytearray(b"\xAA\xBB"))
+    client.read_gatt_descriptor = AsyncMock(return_value=bytearray(b"\xaa\xbb"))
     client.write_gatt_descriptor = AsyncMock()
     client.start_notify = AsyncMock()
     client.stop_notify = AsyncMock()

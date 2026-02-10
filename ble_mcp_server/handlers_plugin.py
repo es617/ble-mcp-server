@@ -6,13 +6,12 @@ closures that capture them.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
 from mcp.types import Tool
-
-import re
 
 from ble_mcp_server.helpers import _err, _ok
 from ble_mcp_server.plugins import PluginManager
@@ -71,6 +70,7 @@ def _suggest_plugin_path(plugins_dir: Path, device_name: str | None = None) -> P
     name = device_name or "my_device"
     slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     return plugins_dir / f"{slug}.py"
+
 
 # ---------------------------------------------------------------------------
 # Tool definitions
@@ -133,8 +133,7 @@ TOOLS: list[Tool] = [
     Tool(
         name="ble.plugin.load",
         description=(
-            "Load a new plugin from a file or directory path. "
-            "Requires BLE_MCP_PLUGINS env var to be set."
+            "Load a new plugin from a file or directory path. Requires BLE_MCP_PLUGINS env var to be set."
         ),
         inputSchema={
             "type": "object",

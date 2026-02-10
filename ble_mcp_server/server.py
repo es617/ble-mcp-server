@@ -15,7 +15,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
 from ble_mcp_server import handlers_ble, handlers_plugin, handlers_spec, handlers_trace
-from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _ok, _result_text
+from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _result_text
 from ble_mcp_server.plugins import PluginManager, parse_plugin_policy
 from ble_mcp_server.specs import resolve_spec_root
 from ble_mcp_server.state import BleState
@@ -37,9 +37,7 @@ logger = logging.getLogger("ble_mcp_server")
 # Tool & handler registry (merged from handler modules)
 # ---------------------------------------------------------------------------
 
-TOOLS: list[Tool] = (
-    handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
-)
+TOOLS: list[Tool] = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
 _HANDLERS: dict[str, Any] = {
     **handlers_ble.HANDLERS,
     **handlers_spec.HANDLERS,
@@ -62,8 +60,14 @@ def build_server() -> tuple[Server, BleState]:
         buf = get_trace_buffer()
         if _session is None:
             if buf:
-                buf.emit({"event": "disconnect_notify_skipped", "reason": "no_session",
-                          "address": address, "connection_id": connection_id})
+                buf.emit(
+                    {
+                        "event": "disconnect_notify_skipped",
+                        "reason": "no_session",
+                        "address": address,
+                        "connection_id": connection_id,
+                    }
+                )
             return
         try:
             await _session.send_log_message(
@@ -72,11 +76,19 @@ def build_server() -> tuple[Server, BleState]:
                 logger="ble_mcp_server",
             )
             if buf:
-                buf.emit({"event": "disconnect_notify_sent", "address": address, "connection_id": connection_id})
+                buf.emit(
+                    {"event": "disconnect_notify_sent", "address": address, "connection_id": connection_id}
+                )
         except Exception as exc:
             if buf:
-                buf.emit({"event": "disconnect_notify_failed", "address": address,
-                          "connection_id": connection_id, "error": str(exc)})
+                buf.emit(
+                    {
+                        "event": "disconnect_notify_failed",
+                        "address": address,
+                        "connection_id": connection_id,
+                        "error": str(exc),
+                    }
+                )
 
     state.on_disconnect_cb = _notify_disconnect
 
@@ -86,8 +98,14 @@ def build_server() -> tuple[Server, BleState]:
         buf = get_trace_buffer()
         if _session is None:
             if buf:
-                buf.emit({"event": "notification_alert_skipped", "reason": "no_session",
-                          "subscription_id": subscription_id, "connection_id": connection_id})
+                buf.emit(
+                    {
+                        "event": "notification_alert_skipped",
+                        "reason": "no_session",
+                        "subscription_id": subscription_id,
+                        "connection_id": connection_id,
+                    }
+                )
             return
         try:
             await _session.send_log_message(
@@ -96,12 +114,24 @@ def build_server() -> tuple[Server, BleState]:
                 logger="ble_mcp_server",
             )
             if buf:
-                buf.emit({"event": "notification_alert_sent", "subscription_id": subscription_id,
-                          "connection_id": connection_id, "char_uuid": char_uuid})
+                buf.emit(
+                    {
+                        "event": "notification_alert_sent",
+                        "subscription_id": subscription_id,
+                        "connection_id": connection_id,
+                        "char_uuid": char_uuid,
+                    }
+                )
         except Exception as exc:
             if buf:
-                buf.emit({"event": "notification_alert_failed", "subscription_id": subscription_id,
-                          "connection_id": connection_id, "error": str(exc)})
+                buf.emit(
+                    {
+                        "event": "notification_alert_failed",
+                        "subscription_id": subscription_id,
+                        "connection_id": connection_id,
+                        "error": str(exc),
+                    }
+                )
 
     state.on_notification_cb = _notify_gatt
 
@@ -109,8 +139,11 @@ def build_server() -> tuple[Server, BleState]:
     plugins_dir = resolve_spec_root() / "plugins"
     plugins_enabled, plugins_allowlist = parse_plugin_policy()
     manager = PluginManager(
-        plugins_dir, TOOLS, _HANDLERS,
-        enabled=plugins_enabled, allowlist=plugins_allowlist,
+        plugins_dir,
+        TOOLS,
+        _HANDLERS,
+        enabled=plugins_enabled,
+        allowlist=plugins_allowlist,
     )
     manager.load_all()
     _HANDLERS.update(handlers_plugin.make_handlers(manager, server))
@@ -143,7 +176,7 @@ def build_server() -> tuple[Server, BleState]:
             result = _err("invalid_params", str(exc))
         except ConnectionError as exc:
             result = _err("disconnected", str(exc))
-        except asyncio.TimeoutError:
+        except TimeoutError:
             result = _err("timeout", "BLE operation timed out.")
         except Exception as exc:
             logger.error("Unhandled error in %s: %s", name, exc, exc_info=True)
@@ -151,14 +184,18 @@ def build_server() -> tuple[Server, BleState]:
 
         if buf:
             duration_ms = round((time.monotonic() - t0) * 1000, 1)
-            buf.emit({
-                "event": "tool_call_end",
-                "tool": name,
-                "ok": result.get("ok"),
-                "error_code": result.get("error", {}).get("code") if isinstance(result.get("error"), dict) else None,
-                "duration_ms": duration_ms,
-                "connection_id": cid,
-            })
+            buf.emit(
+                {
+                    "event": "tool_call_end",
+                    "tool": name,
+                    "ok": result.get("ok"),
+                    "error_code": result.get("error", {}).get("code")
+                    if isinstance(result.get("error"), dict)
+                    else None,
+                    "duration_ms": duration_ms,
+                    "connection_id": cid,
+                }
+            )
 
         return _result_text(result)
 

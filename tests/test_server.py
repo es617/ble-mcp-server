@@ -2,12 +2,11 @@
 
 import json
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ble_mcp_server.state import BleState, ConnectionEntry, normalize_uuid
-
 
 # ---------------------------------------------------------------------------
 # Write-gate tests (pure logic, no BLE)
@@ -26,11 +25,14 @@ class TestWriteGate:
             from ble_mcp_server.handlers_ble import handle_write
 
             state = BleState()
-            result = await handle_write(state, {
-                "connection_id": "fake",
-                "char_uuid": "180a",
-                "value_hex": "01",
-            })
+            result = await handle_write(
+                state,
+                {
+                    "connection_id": "fake",
+                    "char_uuid": "180a",
+                    "value_hex": "01",
+                },
+            )
             assert result["ok"] is False
             assert result["error"]["code"] == "writes_disabled"
 
@@ -46,11 +48,14 @@ class TestWriteGate:
             srv.WRITE_ALLOWLIST = {normalize_uuid("180a")}
 
             state = BleState()
-            result = await srv.handle_write(state, {
-                "connection_id": "fake",
-                "char_uuid": "180b",
-                "value_hex": "01",
-            })
+            result = await srv.handle_write(
+                state,
+                {
+                    "connection_id": "fake",
+                    "char_uuid": "180b",
+                    "value_hex": "01",
+                },
+            )
             assert result["ok"] is False
             assert result["error"]["code"] == "uuid_not_allowed"
         finally:
@@ -75,10 +80,13 @@ class TestWriteGate:
             entry = ConnectionEntry(connection_id="c1", address="AA:BB:CC:DD:EE:FF", client=mock_client)
             state.connections["c1"] = entry
 
-            result = await srv.handle_write(state, {
-                "connection_id": "c1",
-                "char_uuid": "180a",
-            })
+            result = await srv.handle_write(
+                state,
+                {
+                    "connection_id": "c1",
+                    "char_uuid": "180a",
+                },
+            )
             assert result["ok"] is False
             assert result["error"]["code"] == "missing_value"
         finally:

@@ -10,7 +10,7 @@ import importlib.util
 import logging
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -153,9 +153,9 @@ def discover_plugins(plugins_dir: Path) -> list[Path]:
     for child in sorted(plugins_dir.iterdir()):
         if child.name.startswith(".") or child.name == "__pycache__":
             continue
-        if child.is_file() and child.suffix == ".py" and child.name != "__init__.py":
-            results.append(child)
-        elif child.is_dir() and (child / "__init__.py").exists():
+        if (child.is_file() and child.suffix == ".py" and child.name != "__init__.py") or (
+            child.is_dir() and (child / "__init__.py").exists()
+        ):
             results.append(child)
 
     return results
@@ -201,9 +201,7 @@ class PluginManager:
                 "Plugins are disabled. Set BLE_MCP_PLUGINS=all or BLE_MCP_PLUGINS=name1,name2 to enable."
             )
         if self.allowlist is not None and name not in self.allowlist:
-            raise PermissionError(
-                f"Plugin '{name}' is not in the allowlist (BLE_MCP_PLUGINS={self.policy})."
-            )
+            raise PermissionError(f"Plugin '{name}' is not in the allowlist (BLE_MCP_PLUGINS={self.policy}).")
 
     def load(self, plugin_path: Path) -> PluginInfo:
         """Load a plugin and register its tools/handlers.
@@ -214,10 +212,7 @@ class PluginManager:
         resolved = plugin_path.resolve()
         plugins_root = self.plugins_dir.resolve()
         if plugins_root not in resolved.parents and resolved != plugins_root:
-            raise ValueError(
-                f"Plugin path must be inside {self.plugins_dir}/ — "
-                f"got {plugin_path}"
-            )
+            raise ValueError(f"Plugin path must be inside {self.plugins_dir}/ — got {plugin_path}")
 
         name, tools, handlers, module_key, meta = load_plugin(plugin_path)
         try:
@@ -232,9 +227,7 @@ class PluginManager:
             if tool.name in existing_names:
                 # Clean up the module we just loaded
                 sys.modules.pop(module_key, None)
-                raise ValueError(
-                    f"Plugin {name}: tool '{tool.name}' collides with an existing tool"
-                )
+                raise ValueError(f"Plugin {name}: tool '{tool.name}' collides with an existing tool")
 
         self._tools.extend(tools)
         self._handlers.update(handlers)

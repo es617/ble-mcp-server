@@ -3,10 +3,7 @@
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
-from ble_mcp_server.state import BleState, ConnectionEntry, Subscription, check_allowlist, normalize_uuid
-
+from ble_mcp_server.state import BleState, ConnectionEntry, check_allowlist, normalize_uuid
 
 # ---------------------------------------------------------------------------
 # normalize_uuid
@@ -28,7 +25,9 @@ class TestNormalizeUuid:
         assert normalize_uuid(full) == full
 
     def test_full_uuid_lowercased(self):
-        assert normalize_uuid("12345678-1234-1234-1234-123456789ABC") == "12345678-1234-1234-1234-123456789abc"
+        assert (
+            normalize_uuid("12345678-1234-1234-1234-123456789ABC") == "12345678-1234-1234-1234-123456789abc"
+        )
 
     def test_whitespace_stripped(self):
         assert normalize_uuid("  180a  ") == "0000180a-0000-1000-8000-00805f9b34fb"

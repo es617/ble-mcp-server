@@ -8,11 +8,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from mcp.types import Tool
 
 from ble_mcp_server.plugins import PluginManager, discover_plugins, load_plugin, parse_plugin_policy
-
 
 # ---------------------------------------------------------------------------
 # Helpers — write plugin files into tmp_path
@@ -188,7 +186,7 @@ HANDLERS = {"b": _h}
     def test_raises_on_dir_without_init(self, tmp_path: Path) -> None:
         pkg = tmp_path / "noinit"
         pkg.mkdir()
-        with pytest.raises(ValueError, match="no __init__.py"):
+        with pytest.raises(ValueError, match=r"no __init__\.py"):
             load_plugin(pkg)
 
     def test_meta_returned_when_present(self, tmp_path: Path) -> None:
@@ -222,12 +220,20 @@ HANDLERS = {"b": _h}
 
 class TestPluginManager:
     def _make_manager(
-        self, tmp_path: Path, *, enabled: bool = True, allowlist: set[str] | None = None,
+        self,
+        tmp_path: Path,
+        *,
+        enabled: bool = True,
+        allowlist: set[str] | None = None,
     ) -> tuple[PluginManager, list[Tool], dict[str, Any]]:
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir(exist_ok=True)
         tools: list[Tool] = [
-            Tool(name="core.tool", description="core", inputSchema={"type": "object", "properties": {}, "required": []}),
+            Tool(
+                name="core.tool",
+                description="core",
+                inputSchema={"type": "object", "properties": {}, "required": []},
+            ),
         ]
         handlers: dict[str, Any] = {"core.tool": lambda s, a: None}
         manager = PluginManager(plugins_dir, tools, handlers, enabled=enabled, allowlist=allowlist)
@@ -456,7 +462,11 @@ class TestParsePluginPolicy:
 
 class TestPluginManagerPolicy:
     def _make_manager(
-        self, tmp_path: Path, *, enabled: bool = False, allowlist: set[str] | None = None,
+        self,
+        tmp_path: Path,
+        *,
+        enabled: bool = False,
+        allowlist: set[str] | None = None,
     ) -> tuple[PluginManager, list[Tool], dict[str, Any]]:
         plugins_dir = tmp_path / "plugins"
         plugins_dir.mkdir(exist_ok=True)
@@ -654,7 +664,11 @@ class TestPluginHandlers:
         tools: list[Tool] = []
         handlers: dict[str, Any] = {}
         manager = PluginManager(
-            plugins_dir, tools, handlers, enabled=True, allowlist={"alpha", "beta"},
+            plugins_dir,
+            tools,
+            handlers,
+            enabled=True,
+            allowlist={"alpha", "beta"},
         )
 
         plugin_handlers = make_handlers(manager, None)  # type: ignore[arg-type]

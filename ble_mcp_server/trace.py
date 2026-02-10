@@ -10,7 +10,7 @@ import collections
 import copy
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +64,7 @@ class TraceBuffer:
             self._fh = open(file_path, "a", encoding="utf-8")  # noqa: SIM115
 
     def emit(self, event: dict[str, Any]) -> None:
-        event["ts"] = datetime.now(timezone.utc).isoformat()
+        event["ts"] = datetime.now(UTC).isoformat()
         self._deque.append(event)
         if self._fh:
             self._fh.write(json.dumps(event, default=str) + "\n")
