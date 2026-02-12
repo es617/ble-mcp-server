@@ -50,11 +50,11 @@ HANDLERS: dict[str, Callable] = {  # Maps tool name → async handler function
 }
 ```
 
-In `server.py`, these are merged at module level:
+In `server.py`, these are merged inside `build_server()`:
 
 ```python
-TOOLS = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
-_HANDLERS = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
+tools = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
+handlers = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
 ```
 
 Plugin handlers are added in `build_server()` via `handlers_plugin.make_handlers()`, which returns closures that capture the `PluginManager` and `Server` instances.
@@ -111,6 +111,16 @@ Open the URL with the auth token printed in the terminal. In the web UI:
 - The **Notifications** panel shows MCP log messages (disconnect alerts, GATT notification alerts) in real time
 
 This is the easiest way to verify that MCP notifications are actually being sent. Claude Code does not surface these log messages, so the Inspector is the primary debugging tool for notification-related work.
+
+## CLI test client
+
+An interactive CLI for testing the MCP server over stdio, useful on headless machines (e.g. Raspberry Pi) or when you don't have Claude Code:
+
+```bash
+python tools/mcp_cli.py
+```
+
+Type `help` for available commands. Supports scanning, connecting, service discovery, read/write, and notifications. Auto-tracks the last scan and connection IDs between commands.
 
 ## Tests
 
