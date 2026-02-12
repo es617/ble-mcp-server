@@ -92,6 +92,7 @@ class McpClient:
     def initialize(self):
         # Check if server started successfully
         import time
+
         time.sleep(0.5)
         if self.proc.poll() is not None:
             stderr = self.proc.stderr.read()
@@ -100,20 +101,22 @@ class McpClient:
                 print(f"  [stderr] {stderr.strip()}")
             return None
 
-        self.send({
-            "jsonrpc": "2.0",
-            "id": _next_id(),
-            "method": "initialize",
-            "params": {
-                "protocolVersion": "2024-11-05",
-                "capabilities": {},
-                "clientInfo": {"name": "mcp-cli", "version": "0.1"},
-            },
-        })
+        self.send(
+            {
+                "jsonrpc": "2.0",
+                "id": _next_id(),
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "mcp-cli", "version": "0.1"},
+                },
+            }
+        )
         resp = self.recv()
         if resp is None:
             stderr = self.proc.stderr.read()
-            print(f"  [error] No response to initialize")
+            print("  [error] No response to initialize")
             if stderr:
                 print(f"  [stderr] {stderr.strip()}")
             return None
@@ -242,7 +245,7 @@ def cmd_connect(client, args):
         if 0 <= idx < len(last_devices):
             address = last_devices[idx]["address"]
         else:
-            print(f"  Index {idx} out of range (0-{len(last_devices)-1})")
+            print(f"  Index {idx} out of range (0-{len(last_devices) - 1})")
             return
 
     timeout = float(args[1]) if len(args) > 1 else 10
@@ -324,13 +327,16 @@ def cmd_write(client, args):
     if not cid:
         print("  No connection ID. Run 'connect' first.")
         return
-    result = client.call_tool("ble.write", {
-        "connection_id": cid,
-        "char_uuid": char_uuid,
-        "value_hex": value_hex,
-    })
+    result = client.call_tool(
+        "ble.write",
+        {
+            "connection_id": cid,
+            "char_uuid": char_uuid,
+            "value_hex": value_hex,
+        },
+    )
     if result and result.get("ok"):
-        print(f"  Written {len(value_hex)//2} bytes to {char_uuid}")
+        print(f"  Written {len(value_hex) // 2} bytes to {char_uuid}")
     else:
         pp(result)
 
@@ -364,10 +370,13 @@ def cmd_poll(client, args):
     if not cid:
         print("  No connection ID. Run 'connect' first.")
         return
-    result = client.call_tool("ble.poll_notifications", {
-        "connection_id": cid,
-        "subscription_id": sid,
-    })
+    result = client.call_tool(
+        "ble.poll_notifications",
+        {
+            "connection_id": cid,
+            "subscription_id": sid,
+        },
+    )
     if result and result.get("ok"):
         notifications = result.get("notifications", [])
         dropped = result.get("dropped", 0)
@@ -449,10 +458,10 @@ COMMANDS = {
 
 def cmd_help():
     print("\nAvailable commands:\n")
-    for name, (_, desc) in COMMANDS.items():
+    for _name, (_, desc) in COMMANDS.items():
         print(f"  {desc}")
-    print(f"\n  help — Show this help")
-    print(f"  quit — Exit\n")
+    print("\n  help — Show this help")
+    print("  quit — Exit\n")
 
 
 # ---------------------------------------------------------------------------
@@ -472,8 +481,8 @@ def main():
         print("  [error] Failed to initialize server.")
         return
 
-    print(f"  Connection ID memory: auto-tracked from last connect")
-    print(f"  Scan ID memory: auto-tracked from last scan\n")
+    print("  Connection ID memory: auto-tracked from last connect")
+    print("  Scan ID memory: auto-tracked from last scan\n")
 
     try:
         while True:

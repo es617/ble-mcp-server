@@ -303,9 +303,8 @@ def on_write(characteristic: BlessGATTCharacteristic, value: Any, **kwargs):
     elif uuid == CHAR_CONTROL:
         if len(value) >= 1:
             cmd = value[0]
-            if data_service.handle_control(cmd):
-                if cmd == CMD_START and _server is not None:
-                    asyncio.get_running_loop().create_task(_run_collection())
+            if data_service.handle_control(cmd) and cmd == CMD_START and _server is not None:
+                asyncio.get_running_loop().create_task(_run_collection())
 
     elif uuid == CHAR_NUS_RX:
         logger.info("UART RX: %s", bytes(value).decode("utf-8", errors="replace"))
@@ -340,7 +339,9 @@ async def _run_collection():
     )
 
     try:
-        while data_service.state == STATE_COLLECTING and data_service.samples_sent < data_service.sample_count:
+        while (
+            data_service.state == STATE_COLLECTING and data_service.samples_sent < data_service.sample_count
+        ):
             sample = data_service.make_sample()
             data_service.samples_sent += 1
 

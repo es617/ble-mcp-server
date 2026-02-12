@@ -6,7 +6,7 @@ import struct
 
 from mcp.types import Tool
 
-from ble_mcp_server.helpers import _ok, _err
+from ble_mcp_server.helpers import _err, _ok
 from ble_mcp_server.state import BleState
 
 META = {
@@ -23,16 +23,16 @@ META = {
 
 # Device Information
 UUID_MANUFACTURER = "00002a29-0000-1000-8000-00805f9b34fb"
-UUID_MODEL        = "00002a24-0000-1000-8000-00805f9b34fb"
-UUID_FIRMWARE     = "00002a26-0000-1000-8000-00805f9b34fb"
-UUID_SERIAL       = "00002a25-0000-1000-8000-00805f9b34fb"
-UUID_PNP          = "00002a50-0000-1000-8000-00805f9b34fb"
+UUID_MODEL = "00002a24-0000-1000-8000-00805f9b34fb"
+UUID_FIRMWARE = "00002a26-0000-1000-8000-00805f9b34fb"
+UUID_SERIAL = "00002a25-0000-1000-8000-00805f9b34fb"
+UUID_PNP = "00002a50-0000-1000-8000-00805f9b34fb"
 
 # Sampler Service
-UUID_SAMPLER_STATUS  = "12345678-1234-1234-1234-100000000001"
-UUID_SAMPLER_CONFIG  = "12345678-1234-1234-1234-100000000002"
+UUID_SAMPLER_STATUS = "12345678-1234-1234-1234-100000000001"
+UUID_SAMPLER_CONFIG = "12345678-1234-1234-1234-100000000002"
 UUID_SAMPLER_CONTROL = "12345678-1234-1234-1234-100000000003"
-UUID_SAMPLER_DATA    = "12345678-1234-1234-1234-100000000004"
+UUID_SAMPLER_DATA = "12345678-1234-1234-1234-100000000004"
 
 # Nordic UART Service
 UUID_NUS_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
@@ -146,12 +146,14 @@ async def handle_get_samples(state: BleState, args: dict) -> dict:
         def on_notify(_handle, data: bytearray):
             if len(data) >= 10:
                 index, timestamp, ch1, ch2 = struct.unpack_from("<HlHH", data)
-                samples.append({
-                    "index": index,
-                    "timestamp": timestamp,
-                    "channel_1": ch1,
-                    "channel_2": ch2,
-                })
+                samples.append(
+                    {
+                        "index": index,
+                        "timestamp": timestamp,
+                        "channel_1": ch1,
+                        "channel_2": ch2,
+                    }
+                )
             if len(samples) >= new_count:
                 event.set()
 
@@ -170,7 +172,7 @@ async def handle_get_samples(state: BleState, args: dict) -> dict:
             total=len(samples),
             status=status,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await client.stop_notify(UUID_SAMPLER_DATA)
         return _err("timeout", f"Timed out waiting for samples (received {len(samples)}/{new_count})")
     except Exception as e:
@@ -200,7 +202,7 @@ async def handle_uart_send(state: BleState, args: dict) -> dict:
             sent=message,
             response="".join(response_data),
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         await client.stop_notify(UUID_NUS_TX)
         return _err("timeout", "Timed out waiting for UART response")
     except Exception as e:
