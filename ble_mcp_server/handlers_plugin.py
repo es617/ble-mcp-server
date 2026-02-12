@@ -25,7 +25,7 @@ def _plugin_template(device_name: str | None = None) -> str:
 
 from mcp.types import Tool
 
-from ble_mcp_server.helpers import _ok, _err
+from ble_mcp_server.helpers import _ok, _err  # _ok(key=val) / _err("code", "message")
 from ble_mcp_server.state import BleState
 
 # Optional metadata — helps the agent match this plugin to a device.
@@ -53,10 +53,15 @@ TOOLS = [
 
 async def handle_example(state: BleState, args: dict) -> dict:
     connection_id = args["connection_id"]
+    # require_connected raises KeyError/ConnectionError on bad or dead connections.
+    # The server catches these automatically — don't wrap in try/except.
     entry = state.require_connected(connection_id)
     # Use entry.client (BleakClient) to interact with the device:
     #   value = await entry.client.read_gatt_char("char-uuid")
     #   await entry.client.write_gatt_char("char-uuid", bytes([0x01]))
+    #
+    # Return errors with: return _err("error_code", "Human-readable message")
+    # Return success with: return _ok(key1=val1, key2=val2)
     return _ok(message="Hello from {slug} plugin!")
 
 
