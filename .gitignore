@@ -13,3 +13,4 @@ ble_mcp_server/_version.py
 coverage.md
 .coverage
 .DS_Store
+.mcpregistry_*

@@ -1,5 +1,7 @@
 # BLE MCP Server
 
+<!-- mcp-name: io.github.es617/ble-mcp-server -->
+
 ![MCP](https://img.shields.io/badge/MCP-compatible-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)
@@ -59,7 +61,7 @@ Then in Claude Code, try:
 
 The server is **read-only by default**. Writes and plugins can control real hardware and execute code, and are opt-in via environment variables. See [Safety](#safety) for details.
 
-<p align="center"><img src="docs/assets/scan.gif" alt="Scanning for BLE devices" width="600"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/es617/ble-mcp-server/main/docs/assets/scan.gif" alt="Scanning for BLE devices" width="600"></p>
 
 ---
 
@@ -161,7 +163,7 @@ Without a spec, the agent can still discover services and read characteristics. 
 
 You can create specs by telling the agent about your device — paste a datasheet, describe the protocol, or just let it explore and document what it finds. The agent generates the spec file, registers it, and references it in future sessions. You can also write specs by hand.
 
-<p align="center"><img src="docs/assets/specs_flow.gif" alt="Working with protocol specs" width="600"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/es617/ble-mcp-server/main/docs/assets/specs_flow.gif" alt="Working with protocol specs" width="600"></p>
 
 See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.md) for details on spec format and how the agent uses them.
 
@@ -173,7 +175,7 @@ Plugins add device-specific shortcut tools to the server. Instead of the agent c
 
 The agent can also **create** plugins (with your approval). It explores a device, writes a plugin based on what it learns, and future sessions get shortcut tools — no manual coding required.
 
-<p align="center"><img src="docs/assets/plugin_flow_3.png" alt="Agent creating a plugin" width="600"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/es617/ble-mcp-server/main/docs/assets/plugin_flow_3.png" alt="Agent creating a plugin" width="600"></p>
 
 To enable plugins:
 

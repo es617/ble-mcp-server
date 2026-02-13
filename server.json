@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.es617/ble-mcp-server",
+  "description": "Let AI agents interact with real BLE hardware — scan, connect, read, write, and subscribe.",
+  "repository": {
+    "url": "https://github.com/es617/ble-mcp-server.git",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "ble-mcp-server",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Enable BLE characteristic writes (off by default for safety)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_ALLOW_WRITES"
+        },
+        {
+          "description": "Comma-separated UUID allowlist for writable characteristics",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_WRITE_ALLOWLIST"
+        },
+        {
+          "description": "Plugin policy: 'all' or comma-separated plugin names. Unset = disabled.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_PLUGINS"
+        }
+      ]
+    }
+  ]
+}
