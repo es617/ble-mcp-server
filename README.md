@@ -10,6 +10,12 @@ Works out of the box with Claude Code and any MCP-compatible runtime. Communicat
 
 > **Example:** Let Claude Code scan for nearby BLE devices, connect to one, read characteristics, and stream notifications from real hardware.
 
+### Demo
+
+[![Demo video](https://img.youtube.com/vi/k-VyMqnnhuI/maxresdefault.jpg)](https://www.youtube.com/watch?v=k-VyMqnnhuI)
+
+*7-minute end-to-end demo: scanning a real BLE device, discovering services, reading values, and promoting flows into plugins.*
+
 ---
 
 ## Why this exists
@@ -55,6 +61,8 @@ Then in Claude Code, try:
 
 The server is **read-only by default**. Writes and plugins can control real hardware and execute code, and are opt-in via environment variables. See [Safety](#safety) for details.
 
+<p align="center"><img src="docs/assets/scan.gif" alt="Scanning for BLE devices" width="600"></p>
+
 ---
 
 ## What the agent can do
@@ -73,7 +81,7 @@ The agent handles multi-step flows automatically. For example, "read the tempera
 
 At a high level:
 
-**Raw BLE → Protocol Spec → Plugin → Automation**
+**Raw BLE → Protocol Spec → Plugin**
 
 You can start with raw BLE tools, then move up the stack as your device protocol becomes understood and repeatable. See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.md) for how the pieces fit together.
 
@@ -155,6 +163,8 @@ Without a spec, the agent can still discover services and read characteristics. 
 
 You can create specs by telling the agent about your device — paste a datasheet, describe the protocol, or just let it explore and document what it finds. The agent generates the spec file, registers it, and references it in future sessions. You can also write specs by hand.
 
+<p align="center"><img src="docs/assets/specs_flow.gif" alt="Working with protocol specs" width="600"></p>
+
 See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.md) for details on spec format and how the agent uses them.
 
 ---
@@ -164,6 +174,8 @@ See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.m
 Plugins add device-specific shortcut tools to the server. Instead of the agent composing raw read/write sequences, a plugin provides high-level operations like `sensortag.read_temp` or `ota.upload_firmware`.
 
 The agent can also **create** plugins (with your approval). It explores a device, writes a plugin based on what it learns, and future sessions get shortcut tools — no manual coding required.
+
+<p align="center"><img src="docs/assets/plugin_flow_3.png" alt="Agent creating a plugin" width="600"></p>
 
 To enable plugins:
 
@@ -229,18 +241,20 @@ If you are running in a container or headless environment, ensure `dbus` and `bl
 
 ## Example session
 
-> "Scan for BLE devices and connect to the one called SensorTag. Read the temperature."
+The repo includes a simulated BLE peripheral you can run on a second machine (e.g. a Raspberry Pi) to try things end-to-end — no real hardware needed. See [`examples/demo-device/`](examples/demo-device/) for setup.
+
+> "Scan for BLE devices and connect to DemoDevice. Read the battery level, then start a data collection."
 
 The agent will:
 
-1. Scan for nearby devices and find the SensorTag
+1. Scan for nearby devices and find DemoDevice
 2. Connect and discover its services
 3. Check for a matching protocol spec — if one exists, attach it to understand the device's protocol
-4. Check for a matching plugin — if one exists, use its shortcut tools (e.g., `sensortag.read_temp`)
+4. Check for a matching plugin — if one exists, use its shortcut tools
 5. If no spec or plugin exists, explore the device using raw BLE tools, or ask you for guidance
-6. Read the temperature and report the result
+6. Read the battery level, configure the data service, and start collection
 
-After a session, the agent can create a spec or plugin for the device so future sessions are faster.
+The example includes a pre-built [protocol spec](examples/demo-device/demo-device.md) and [plugin](examples/demo-device/demo_device.py) — copy them into `.ble_mcp/specs/` and `.ble_mcp/plugins/` to skip the exploration phase, or let the agent create its own from scratch.
 
 ---
 
@@ -268,9 +282,9 @@ Open the URL with the auth token from the terminal output. The Inspector gives y
 
 ## Known limitations
 
-- **MCP log notifications are client-dependent.** The server sends MCP `notifications/message` log events for device disconnects and incoming GATT notifications. These work in the MCP Inspector but Claude Code currently does not surface them. The agent will still detect disconnects on the next tool call and can poll for GATT notifications — the log messages are a best-effort heads-up, not a guarantee.
+- **Real hardware is asynchronous; agent runtimes mostly aren't.** Devices disconnect, notifications arrive out of band, and state changes while the agent is thinking. Most agent runtimes are optimized for clean request/response loops. The server bridges this with polling tools, buffered notification queues, and MCP log notifications for disconnects and incoming data — but MCP log notifications are client-dependent (they work in the MCP Inspector; Claude Code currently ignores them). The agent can always detect disconnects on the next tool call and poll for notifications explicitly — the log messages are a best-effort heads-up, not a guarantee.
 
-- **Single-client only.** The server captures one MCP session at a time (stdio transport). If multi-client transports (HTTP/SSE) are added later, the notification mechanism will need rework.
+- **Single-client only.** The server handles one MCP session at a time (stdio transport). Multi-client transports (HTTP/SSE) may be added later.
 
 ---
 
@@ -295,4 +309,4 @@ This project is licensed under the MIT License — see [LICENSE](https://github.
 
 ## Acknowledgements
 
-- This project is built on top of the excellent [bleak](https://github.com/hbldh/bleak) library for cross-platform BLE in Python.
+This project is built on top of the excellent [bleak](https://github.com/hbldh/bleak) library for cross-platform BLE in Python.

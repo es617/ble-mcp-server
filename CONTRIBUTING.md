@@ -23,6 +23,7 @@ ble_mcp_server/
   plugins.py            # Plugin loader and manager (no BLE)
   trace.py              # JSONL tracing ring buffer
   handlers_ble.py       # BLE tools (scan, connect, read, write, subscribe)
+  handlers_introspection.py  # Introspection tools (list connections, subscriptions, scans)
   handlers_spec.py      # Spec tools (template, register, list, attach, search)
   handlers_trace.py     # Trace tools (status, tail)
   handlers_plugin.py    # Plugin tools (template, list, load, reload)
@@ -53,8 +54,8 @@ HANDLERS: dict[str, Callable] = {  # Maps tool name → async handler function
 In `server.py`, these are merged inside `build_server()`:
 
 ```python
-tools = handlers_ble.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
-handlers = {**handlers_ble.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
+tools = handlers_ble.TOOLS + handlers_introspection.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
+handlers = {**handlers_ble.HANDLERS, **handlers_introspection.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
 ```
 
 Plugin handlers are added in `build_server()` via `handlers_plugin.make_handlers()`, which returns closures that capture the `PluginManager` and `Server` instances.

@@ -12,3 +12,4 @@ ble_mcp_server/_version.py
 .ble_mcp/traces/
 coverage.md
 .coverage
+.DS_Store
