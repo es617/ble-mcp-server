@@ -402,28 +402,37 @@ class BleState:
         devices = sorted(entry.devices.values(), key=lambda d: d.get("rssi", -999), reverse=True)
         return devices, entry.active
 
-    async def shutdown(self) -> None:
+    async def shutdown(self, timeout: float = 2.0) -> None:
         """Stop all scans and disconnect every client – used at server shutdown.
+
+        Uses a timeout to avoid blocking if BLE operations hang. The MCP client
+        (e.g. Claude Code) will force-kill the process shortly after closing the
+        pipe, so we need to finish quickly.
 
         Idempotent: safe to call multiple times.
         """
         if self._shutdown_done:
             return
         self._shutdown_done = True
+        try:
+            await asyncio.wait_for(self._shutdown_inner(), timeout=timeout)
+        except (TimeoutError, Exception):
+            logger.debug("Shutdown timed out or errored, exiting anyway")
+
+    async def _shutdown_inner(self) -> None:
         # Stop active scans
         for sid in list(self.scans.keys()):
             try:
                 await self.stop_scan(sid)
             except Exception:
-                logger.warning("Error stopping scan %s during shutdown", sid, exc_info=True)
+                pass
         self.scans.clear()
         # Disconnect BLE clients
-        cids = list(self.connections.keys())
-        for cid in cids:
+        for cid in list(self.connections.keys()):
             try:
                 await self.remove_connection(cid)
             except Exception:
-                logger.warning("Error during shutdown of %s", cid, exc_info=True)
+                pass
 
     # -- subscriptions -------------------------------------------------------
 

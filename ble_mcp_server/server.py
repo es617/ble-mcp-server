@@ -5,11 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import signal
 import sys
 import time
 from typing import Any
 
+import anyio
 from mcp.server import NotificationOptions, Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
@@ -245,39 +245,52 @@ async def _run() -> None:
         WRITE_ALLOWLIST if WRITE_ALLOWLIST else "none",
     )
 
-    async with stdio_server() as (read_stream, write_stream):
-        # Register clean shutdown on SIGINT / SIGTERM
-        loop = asyncio.get_running_loop()
+    _BENIGN_ASYNC = (EOFError, BrokenPipeError, anyio.ClosedResourceError, anyio.BrokenResourceError)
 
-        def _request_shutdown(sig: signal.Signals) -> None:
-            logger.info("Received %s – shutting down", sig.name)
-            # Close the read stream to unblock server.run(), then clean up once after it exits
-            loop.create_task(read_stream.aclose())
-
-        for sig in (signal.SIGINT, signal.SIGTERM):
+    try:
+        async with stdio_server() as (read_stream, write_stream):
+            init_options = server.create_initialization_options(
+                notification_options=NotificationOptions(tools_changed=True),
+            )
+            await server.run(read_stream, write_stream, init_options)
+    except _BENIGN_ASYNC:
+        # Normal termination — client closed stdin / streams broke.
+        pass
+    except BaseExceptionGroup as eg:
+        # anyio wraps stream-closure errors in ExceptionGroup on Python 3.11+.
+        if not all(isinstance(e, _BENIGN_ASYNC) for e in eg.exceptions):
+            raise
+    finally:
+        try:
+            await asyncio.wait_for(asyncio.shield(state.shutdown()), timeout=0.25)
+        except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+            pass
+        buf = get_trace_buffer()
+        if buf:
             try:
-                loop.add_signal_handler(sig, _request_shutdown, sig)
-            except NotImplementedError:
-                # Windows doesn't support add_signal_handler for SIGTERM
+                buf.close()
+            except Exception:
                 pass
 
-        init_options = server.create_initialization_options(
-            notification_options=NotificationOptions(tools_changed=True),
-        )
-        await server.run(read_stream, write_stream, init_options)
 
-    # Single cleanup path — runs after server.run() exits (normal or signal)
-    await state.shutdown()
-    buf = get_trace_buffer()
-    if buf:
-        buf.close()
+_BENIGN_SYNC = (
+    KeyboardInterrupt,
+    BrokenPipeError,
+    EOFError,
+    ConnectionError,
+    anyio.ClosedResourceError,
+    anyio.BrokenResourceError,
+)
 
 
 def main() -> None:
     try:
         asyncio.run(_run())
-    except (KeyboardInterrupt, BrokenPipeError):
+    except _BENIGN_SYNC:
         pass
+    except BaseExceptionGroup as eg:
+        if not all(isinstance(e, _BENIGN_SYNC) for e in eg.exceptions):
+            raise
 
 
 if __name__ == "__main__":
