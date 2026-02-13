@@ -12,9 +12,7 @@ Works out of the box with Claude Code and any MCP-compatible runtime. Communicat
 
 ### Demo
 
-[![Demo video](https://img.youtube.com/vi/k-VyMqnnhuI/maxresdefault.jpg)](https://www.youtube.com/watch?v=k-VyMqnnhuI)
-
-*7-minute end-to-end demo: scanning a real BLE device, discovering services, reading values, and promoting flows into plugins.*
+[7-minute video walkthrough](https://www.youtube.com/watch?v=k-VyMqnnhuI) — scanning a real BLE device, discovering services, reading values, and promoting flows into plugins.
 
 ---
 

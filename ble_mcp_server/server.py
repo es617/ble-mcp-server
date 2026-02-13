@@ -263,7 +263,7 @@ async def _run() -> None:
     finally:
         try:
             await asyncio.wait_for(asyncio.shield(state.shutdown()), timeout=0.25)
-        except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+        except (TimeoutError, asyncio.CancelledError, Exception):
             pass
         buf = get_trace_buffer()
         if buf:
