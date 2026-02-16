@@ -227,6 +227,11 @@ class PluginManager:
 
         name, tools, handlers, module_key, meta = load_plugin(plugin_path)
 
+        # If already loaded, unload first (makes load idempotent)
+        if name in self.loaded:
+            logger.info("Plugin %s already loaded — reloading", name)
+            self.unload(name)
+
         # Check for name collisions
         existing_names = {t.name for t in self._tools}
         for tool in tools:
