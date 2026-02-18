@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1
+
+- Add MCP registry metadata (server.json)
+- Fix image URLs for PyPI rendering
+
 ## 0.1.0
 
 Initial release.
