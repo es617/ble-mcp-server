@@ -8,7 +8,10 @@ dynamic = ["version"]
 description = "Bluetooth Low Energy (BLE) Model Context Protocol server for AI agents and developer tooling"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {file = "LICENSE"}
+license = "MIT"
+authors = [
+    {name = "Enrico Santagati"},
+]
 dependencies = [
     "bleak>=2.1,<3",
     "mcp>=1.0,<2",
@@ -25,6 +28,12 @@ dev = [
     "pre-commit>=4.0",
     "ruff>=0.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/es617/ble-mcp-server"
+Repository = "https://github.com/es617/ble-mcp-server"
+Issues = "https://github.com/es617/ble-mcp-server/issues"
+Changelog = "https://github.com/es617/ble-mcp-server/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ble_mcp = "ble_mcp_server.server:main"
