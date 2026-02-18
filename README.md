@@ -241,7 +241,7 @@ If you are running in a container or headless environment, ensure `dbus` and `bl
 
 ## Example session
 
-The repo includes a simulated BLE peripheral you can run on a second machine (e.g. a Raspberry Pi) to try things end-to-end — no real hardware needed. See [`examples/demo-device/`](examples/demo-device/) for setup.
+The repo includes a simulated BLE peripheral you can run on a second machine (e.g. a Raspberry Pi) to try things end-to-end — no real hardware needed. See [`examples/demo-device/`](https://github.com/es617/ble-mcp-server/tree/main/examples/demo-device) for setup.
 
 > "Scan for BLE devices and connect to DemoDevice. Read the battery level, then start a data collection."
 
