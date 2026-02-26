@@ -9,7 +9,7 @@ from typing import Any
 
 from mcp.types import Tool
 
-from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _err, _ok, _retry
+from ble_mcp_server.helpers import ALLOW_WRITES, WRITE_ALLOWLIST, _coerce_bool, _err, _ok, _retry
 from ble_mcp_server.state import BleState, Subscription, check_allowlist, normalize_uuid
 
 logger = logging.getLogger("ble_mcp_server")
@@ -128,7 +128,7 @@ TOOLS: list[Tool] = [
                     "default": 10,
                 },
                 "pair": {
-                    "type": "boolean",
+                    "type": ["boolean", "string"],
                     "description": "Pair (bond) during connect. Works on Linux and Windows, not macOS.",
                     "default": False,
                 },
@@ -220,7 +220,7 @@ TOOLS: list[Tool] = [
                 "value_b64": {"type": "string", "description": "Base64-encoded value to write."},
                 "value_hex": {"type": "string", "description": "Hex-encoded value to write."},
                 "with_response": {
-                    "type": "boolean",
+                    "type": ["boolean", "string"],
                     "description": "Use write-with-response (default true).",
                     "default": True,
                 },
@@ -396,7 +396,7 @@ async def handle_scan_stop(state: BleState, args: dict[str, Any]) -> dict[str, A
 async def handle_connect(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
     address = args["address"]
     timeout = _clamp(float(args.get("timeout_s", 10)), 1, 60)
-    pair = bool(args.get("pair", False))
+    pair = _coerce_bool(args.get("pair", False))
 
     entry = state.create_client(address, timeout, pair=pair)
     client = entry.client
@@ -547,7 +547,7 @@ async def handle_write(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
         return result
     data = result
 
-    with_response = args.get("with_response", True)
+    with_response = _coerce_bool(args.get("with_response", True))
     await _retry(lambda: entry.client.write_gatt_char(char_uuid, data, response=with_response))
     return _ok()
 

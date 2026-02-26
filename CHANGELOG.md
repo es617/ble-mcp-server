@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+### Fixed
+- Accept string-typed boolean parameters (`"true"` instead of `true`). Affected fields: `pair`, `with_response`.
+
 ## 0.1.2
 
 ### Fixed

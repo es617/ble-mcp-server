@@ -37,6 +37,13 @@ MAX_SUBSCRIPTIONS_PER_CONN = int(os.environ.get("BLE_MCP_MAX_SUBSCRIPTIONS_PER_C
 # ---------------------------------------------------------------------------
 
 
+def _coerce_bool(value: Any) -> bool:
+    """Coerce a value to bool, handling string representations."""
+    if isinstance(value, str):
+        return value.lower() not in ("false", "0", "")
+    return bool(value)
+
+
 def _ok(**kwargs: Any) -> dict[str, Any]:
     return {"ok": True, **kwargs}
 
