@@ -58,7 +58,7 @@ TOOLS: list[Tool] = [
             "type": "object",
             "properties": {
                 "timeout_s": {
-                    "type": "number",
+                    "type": ["number", "string"],
                     "description": "Max scan duration in seconds (default 10, max 60). Scan auto-stops after this.",
                     "default": 10,
                 },
@@ -123,7 +123,7 @@ TOOLS: list[Tool] = [
                     "description": "MAC address or platform identifier of the device.",
                 },
                 "timeout_s": {
-                    "type": "number",
+                    "type": ["number", "string"],
                     "description": "Connection timeout in seconds (default 10).",
                     "default": 10,
                 },
@@ -239,7 +239,7 @@ TOOLS: list[Tool] = [
             "properties": {
                 "connection_id": {"type": "string"},
                 "handle": {
-                    "type": "integer",
+                    "type": ["integer", "string"],
                     "description": "The descriptor handle (integer) from ble.discover.",
                 },
             },
@@ -257,7 +257,7 @@ TOOLS: list[Tool] = [
             "properties": {
                 "connection_id": {"type": "string"},
                 "handle": {
-                    "type": "integer",
+                    "type": ["integer", "string"],
                     "description": "The descriptor handle (integer).",
                 },
                 "value_b64": {"type": "string", "description": "Base64-encoded value."},
@@ -303,7 +303,7 @@ TOOLS: list[Tool] = [
                 "connection_id": {"type": "string"},
                 "subscription_id": {"type": "string"},
                 "timeout_s": {
-                    "type": "number",
+                    "type": ["number", "string"],
                     "description": "Max seconds to wait (default 10, max 60).",
                     "default": 10,
                 },
@@ -324,7 +324,7 @@ TOOLS: list[Tool] = [
                 "connection_id": {"type": "string"},
                 "subscription_id": {"type": "string"},
                 "max_items": {
-                    "type": "integer",
+                    "type": ["integer", "string"],
                     "description": "Max notifications to return (default 50, max 1000).",
                     "default": 50,
                 },
@@ -346,17 +346,17 @@ TOOLS: list[Tool] = [
                 "connection_id": {"type": "string"},
                 "subscription_id": {"type": "string"},
                 "timeout_s": {
-                    "type": "number",
+                    "type": ["number", "string"],
                     "description": "Total max wait in seconds (default 2, max 60).",
                     "default": 2,
                 },
                 "idle_timeout_s": {
-                    "type": "number",
+                    "type": ["number", "string"],
                     "description": "Max idle gap between notifications before stopping (default 0.25, max 10).",
                     "default": 0.25,
                 },
                 "max_items": {
-                    "type": "integer",
+                    "type": ["integer", "string"],
                     "description": "Max notifications to collect (default 200, max 5000).",
                     "default": 200,
                 },

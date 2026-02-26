@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+### Fixed
+- Accept string-typed numeric parameters in tool schemas (`"4"` instead of `4`). Some MCP clients serialize all tool arguments as strings, which caused JSON Schema validation errors on `integer` and `number` fields. Affected fields: `handle`, `max_items`, `timeout_s`, `idle_timeout_s`, `k`, `n`.
+
 ## 0.1.1
 
 - Add MCP registry metadata (server.json)
