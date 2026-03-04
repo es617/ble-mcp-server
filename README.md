@@ -8,7 +8,7 @@
 ![BLE](https://img.shields.io/badge/Bluetooth-BLE-0096FF)
 
 A stateful Bluetooth Low Energy (BLE) Model Context Protocol (MCP) server for developer tooling and AI agents.
-Works out of the box with Claude Code and any MCP-compatible runtime. Communicates over **stdio** (no HTTP, no open ports) and uses [bleak](https://github.com/hbldh/bleak) for cross-platform BLE on macOS, Windows, and Linux.
+Works out of the box with Claude Code, VS Code with Copilot, and any MCP-compatible runtime. Communicates over **stdio** (no HTTP, no open ports) and uses [bleak](https://github.com/hbldh/bleak) for cross-platform BLE on macOS, Windows, and Linux.
 
 > **Example:** Let Claude Code scan for nearby BLE devices, connect to one, read characteristics, and stream notifications from real hardware.
 
@@ -126,6 +126,28 @@ claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 ```
 
 > MCP is a protocol. Claude Code is one MCP client; other agent runtimes can also connect to this server.
+
+## Add to VS Code / Copilot
+
+Add to your project's `.vscode/mcp.json` (or create it):
+
+```json
+{
+  "servers": {
+    "ble": {
+      "type": "stdio",
+      "command": "ble_mcp",
+      "args": [],
+      "env": {
+        "BLE_MCP_ALLOW_WRITES": "true",
+        "BLE_MCP_PLUGINS": "all"
+      }
+    }
+  }
+}
+```
+
+Adjust `env` to match your needs — remove `BLE_MCP_ALLOW_WRITES` for read-only mode, or set `BLE_MCP_PLUGINS` to specific plugin names.
 
 ## Environment variables
 
