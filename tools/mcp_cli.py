@@ -8,6 +8,7 @@ Starts the MCP server as a subprocess and provides a simple REPL
 for calling BLE tools interactively.
 """
 
+import argparse
 import json
 import os
 import readline  # noqa: F401 — enables arrow keys / history in input()
@@ -29,8 +30,11 @@ def _next_id():
 
 
 class McpClient:
-    def __init__(self):
+    def __init__(self, separator="."):
+        self.separator = separator
         env = {**os.environ, "BLE_MCP_ALLOW_WRITES": "true"}
+        if separator != ".":
+            env["BLE_MCP_TOOL_SEPARATOR"] = separator
         self.proc = subprocess.Popen(
             [sys.executable, "-m", "ble_mcp_server"],
             stdin=subprocess.PIPE,
@@ -64,7 +68,14 @@ class McpClient:
                 continue
             return msg
 
+    def list_tools(self):
+        msg = {"jsonrpc": "2.0", "id": _next_id(), "method": "tools/list", "params": {}}
+        self.send(msg)
+        return self.recv()
+
     def call_tool(self, name, arguments=None):
+        if self.separator != ".":
+            name = name.replace(".", self.separator)
         msg = {
             "jsonrpc": "2.0",
             "id": _next_id(),
@@ -422,6 +433,19 @@ def cmd_list(client, args):
     pp(result)
 
 
+def cmd_tools(client, args):
+    """List all registered tool names."""
+    resp = client.list_tools()
+    if resp and "result" in resp:
+        tools = resp["result"].get("tools", [])
+        print(f"\n  {len(tools)} tools registered (separator: '{client.separator}'):\n")
+        for t in tools:
+            print(f"  {t['name']}")
+        print()
+    else:
+        pp(resp)
+
+
 def cmd_raw(client, args):
     """Send a raw tool call: raw <tool_name> <json_args>"""
     if not args:
@@ -453,6 +477,7 @@ COMMANDS = {
     "status": (cmd_status, "status [connection_id] — Connection status"),
     "list": (cmd_list, "list [connections|subscriptions|scans] — List active resources"),
     "raw": (cmd_raw, "raw <tool_name> [json_args] — Call any tool directly"),
+    "tools": (cmd_tools, "tools — List all registered tool names"),
 }
 
 
@@ -470,10 +495,20 @@ def cmd_help():
 
 
 def main():
+    parser = argparse.ArgumentParser(description="BLE MCP CLI — interactive test client")
+    parser.add_argument(
+        "--separator",
+        default=".",
+        help="Tool name separator (default '.'). Use '_' for Cursor compatibility.",
+    )
+    opts = parser.parse_args()
+
     print("BLE MCP CLI — interactive test client")
+    if opts.separator != ".":
+        print(f"  Tool separator: '{opts.separator}'")
     print("Type 'help' for commands, 'quit' to exit.\n")
 
-    client = McpClient()
+    client = McpClient(separator=opts.separator)
     resp = client.initialize()
     if resp:
         print("  Server initialized.")

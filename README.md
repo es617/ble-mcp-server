@@ -97,6 +97,8 @@ pip install -e .
 uv pip install -e .
 ```
 
+> MCP is a protocol — this server works with any MCP-compatible client. Below are setup instructions for the most common ones.
+
 ## Add to Claude Code
 
 ```bash
@@ -125,8 +127,6 @@ claude mcp add ble -e BLE_MCP_PLUGINS=sensortag,hello -- ble_mcp
 claude mcp add ble -e BLE_MCP_LOG_LEVEL=DEBUG -- ble_mcp
 ```
 
-> MCP is a protocol. Claude Code is one MCP client; other agent runtimes can also connect to this server.
-
 ## Add to VS Code / Copilot
 
 Add to your project's `.vscode/mcp.json` (or create it):
@@ -149,6 +149,26 @@ Add to your project's `.vscode/mcp.json` (or create it):
 
 Adjust `env` to match your needs — remove `BLE_MCP_ALLOW_WRITES` for read-only mode, or set `BLE_MCP_PLUGINS` to specific plugin names.
 
+## Add to Cursor
+
+Add to your project's `.cursor/mcp.json` (or create it). Cursor does not support dots in tool names, so `BLE_MCP_TOOL_SEPARATOR` must be set to `_`:
+
+```json
+{
+  "mcpServers": {
+    "ble": {
+      "command": "ble_mcp",
+      "args": [],
+      "env": {
+        "BLE_MCP_ALLOW_WRITES": "true",
+        "BLE_MCP_PLUGINS": "all",
+        "BLE_MCP_TOOL_SEPARATOR": "_"
+      }
+    }
+  }
+}
+```
+
 ## Environment variables
 
 | Variable | Default | Description |
@@ -160,6 +180,7 @@ Adjust `env` to match your needs — remove `BLE_MCP_ALLOW_WRITES` for read-only
 | `BLE_MCP_TRACE` | enabled | JSONL tracing of every tool call. Set to `0`, `false`, or `no` to disable. |
 | `BLE_MCP_TRACE_PAYLOADS` | disabled | Include `value_b64`/`value_hex` in traced args (stripped by default). |
 | `BLE_MCP_TRACE_MAX_BYTES` | `16384` | Max payload chars before truncation (only applies when `TRACE_PAYLOADS` is on). |
+| `BLE_MCP_TOOL_SEPARATOR` | `.` | Character used to separate tool name segments. Set to `_` for MCP clients that reject dots in tool names (e.g. Cursor). |
 
 ---
 
