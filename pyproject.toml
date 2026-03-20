@@ -86,4 +86,4 @@ version-file = "ble_mcp_server/_version.py"
 
 [tool.bandit]
 exclude_dirs = ["tests"]
-skips = ["B110"]  # try-except-pass is intentional for best-effort BLE cleanup
+skips = ["B110", "B106"]  # B110: try-except-pass for BLE cleanup; B106: token_type="bearer" is not a hardcoded password
