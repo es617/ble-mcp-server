@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.0
+
+### Added
+- **SSE and Streamable HTTP transports** — `--transport sse` and `--transport streamable-http` for remote access and multi-session use. stdio remains the default.
+- **Per-session isolation** — each MCP session gets its own BLE state (connections, scans, subscriptions). Sessions cannot see each other's data.
+- **OAuth 2.0 authentication** for HTTP transports with password-gated approval page, dynamic client registration (RFC 7591), PKCE, token refresh/revocation. Works with Claude Desktop remote MCP.
+- `--host`, `--port`, `--url`, `--no-auth` CLI arguments for HTTP transport configuration.
+- `BLE_MCP_AUTH_TOKEN` env var — password for OAuth approval page on HTTP transports.
+- `BLE_MCP_MAX_SESSIONS` env var — cap concurrent sessions for HTTP transports (default 1).
+- `[http]` optional dependency group (`pip install ble-mcp-server[http]`).
+- `server.json` now declares all three transports (stdio, SSE, Streamable HTTP).
+
+### Changed
+- **Breaking:** Default tool name separator changed from `.` to `_` (e.g. `ble_scan_start` instead of `ble.scan_start`). Most MCP clients (Cursor, Claude Desktop) reject dots in tool names. Set `BLE_MCP_TOOL_SEPARATOR=.` to restore the old behavior.
+
 ## 0.1.5
 
 ### Fixed
