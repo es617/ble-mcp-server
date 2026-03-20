@@ -41,7 +41,7 @@ from ble_mcp_server.trace import get_trace_buffer, init_trace, sanitize_args
 
 # Tool-name separator (default ".").  Set BLE_MCP_TOOL_SEPARATOR=_ for
 # MCP clients that reject dots in tool names (e.g. Cursor).
-_TOOL_SEP = os.environ.get("BLE_MCP_TOOL_SEPARATOR", ".")
+_TOOL_SEP = os.environ.get("BLE_MCP_TOOL_SEPARATOR", "_")
 
 _LOG_LEVEL = os.environ.get("BLE_MCP_LOG_LEVEL", "WARNING").upper()
 logging.basicConfig(

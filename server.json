@@ -38,7 +38,7 @@
           "name": "BLE_MCP_PLUGINS"
         },
         {
-          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor, Claude Desktop).",
+          "description": "Tool name separator character (default '_'). Set to '.' if your client supports dots.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
@@ -78,7 +78,7 @@
           "name": "BLE_MCP_PLUGINS"
         },
         {
-          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor, Claude Desktop).",
+          "description": "Tool name separator character (default '_'). Set to '.' if your client supports dots.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
@@ -132,7 +132,7 @@
           "name": "BLE_MCP_PLUGINS"
         },
         {
-          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor, Claude Desktop).",
+          "description": "Tool name separator character (default '_'). Set to '.' if your client supports dots.",
           "isRequired": false,
           "format": "string",
           "isSecret": false,

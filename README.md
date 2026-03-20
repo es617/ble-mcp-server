@@ -151,7 +151,7 @@ Adjust `env` to match your needs — remove `BLE_MCP_ALLOW_WRITES` for read-only
 
 ## Add to Cursor
 
-Add to your project's `.cursor/mcp.json` (or create it). Cursor does not support dots in tool names, so `BLE_MCP_TOOL_SEPARATOR` must be set to `_`:
+Add to your project's `.cursor/mcp.json` (or create it):
 
 ```json
 {
@@ -161,8 +161,7 @@ Add to your project's `.cursor/mcp.json` (or create it). Cursor does not support
       "args": [],
       "env": {
         "BLE_MCP_ALLOW_WRITES": "true",
-        "BLE_MCP_PLUGINS": "all",
-        "BLE_MCP_TOOL_SEPARATOR": "_"
+        "BLE_MCP_PLUGINS": "all"
       }
     }
   }
@@ -180,7 +179,7 @@ Add to your project's `.cursor/mcp.json` (or create it). Cursor does not support
 | `BLE_MCP_TRACE` | enabled | JSONL tracing of every tool call. Set to `0`, `false`, or `no` to disable. |
 | `BLE_MCP_TRACE_PAYLOADS` | disabled | Include `value_b64`/`value_hex` in traced args (stripped by default). |
 | `BLE_MCP_TRACE_MAX_BYTES` | `16384` | Max payload chars before truncation (only applies when `TRACE_PAYLOADS` is on). |
-| `BLE_MCP_TOOL_SEPARATOR` | `.` | Character used to separate tool name segments. Set to `_` for MCP clients that reject dots in tool names (e.g. Cursor, or Claude Desktop). |
+| `BLE_MCP_TOOL_SEPARATOR` | `_` | Character used to separate tool name segments. Set to `.` if your client supports dots in tool names. Default changed to `_` because most clients (Cursor, Claude Desktop) reject dots. |
 | `BLE_MCP_MAX_SESSIONS` | `1` | Maximum concurrent MCP sessions (only meaningful for SSE and Streamable HTTP transports). |
 | `BLE_MCP_MAX_CONNECTIONS` | `3` | Maximum active BLE connections per session. |
 | `BLE_MCP_MAX_SCANS` | `5` | Maximum active scans per session. |
@@ -195,11 +194,11 @@ See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.m
 
 | Category | Tools |
 |---|---|
-| **BLE Core** | `ble.scan_start`, `ble.scan_get_results`, `ble.scan_stop`, `ble.connect`, `ble.disconnect`, `ble.connection_status`, `ble.discover`, `ble.mtu`, `ble.read`, `ble.write`, `ble.read_descriptor`, `ble.write_descriptor`, `ble.subscribe`, `ble.unsubscribe`, `ble.wait_notification`, `ble.poll_notifications`, `ble.drain_notifications` |
-| **Introspection** | `ble.connections.list`, `ble.subscriptions.list`, `ble.scans.list` |
-| **Protocol Specs** | `ble.spec.template`, `ble.spec.register`, `ble.spec.list`, `ble.spec.attach`, `ble.spec.get`, `ble.spec.read`, `ble.spec.search` |
-| **Tracing** | `ble.trace.status`, `ble.trace.tail` |
-| **Plugins** | `ble.plugin.template`, `ble.plugin.list`, `ble.plugin.reload`, `ble.plugin.load` |
+| **BLE Core** | `ble_scan_start`, `ble_scan_get_results`, `ble_scan_stop`, `ble_connect`, `ble_disconnect`, `ble_connection_status`, `ble_discover`, `ble_mtu`, `ble_read`, `ble_write`, `ble_read_descriptor`, `ble_write_descriptor`, `ble_subscribe`, `ble_unsubscribe`, `ble_wait_notification`, `ble_poll_notifications`, `ble_drain_notifications` |
+| **Introspection** | `ble_connections_list`, `ble_subscriptions_list`, `ble_scans_list` |
+| **Protocol Specs** | `ble_spec_template`, `ble_spec_register`, `ble_spec_list`, `ble_spec_attach`, `ble_spec_get`, `ble_spec_read`, `ble_spec_search` |
+| **Tracing** | `ble_trace_status`, `ble_trace_tail` |
+| **Plugins** | `ble_plugin_template`, `ble_plugin_list`, `ble_plugin_reload`, `ble_plugin_load` |
 
 ---
 
