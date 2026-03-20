@@ -38,11 +38,119 @@
           "name": "BLE_MCP_PLUGINS"
         },
         {
-          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor).",
+          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor, Claude Desktop).",
           "isRequired": false,
           "format": "string",
           "isSecret": false,
           "name": "BLE_MCP_TOOL_SEPARATOR"
+        }
+      ]
+    },
+    {
+      "registryType": "pypi",
+      "identifier": "ble-mcp-server",
+      "version": "0.1.5",
+      "transport": {
+        "type": "streamable-http",
+        "path": "/mcp"
+      },
+      "args": ["--transport", "streamable-http"],
+      "environmentVariables": [
+        {
+          "description": "Enable BLE characteristic writes (off by default for safety)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_ALLOW_WRITES"
+        },
+        {
+          "description": "Comma-separated UUID allowlist for writable characteristics",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_WRITE_ALLOWLIST"
+        },
+        {
+          "description": "Plugin policy: 'all' or comma-separated plugin names. Unset = disabled.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_PLUGINS"
+        },
+        {
+          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor, Claude Desktop).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_TOOL_SEPARATOR"
+        },
+        {
+          "description": "Maximum concurrent MCP sessions (default 1).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_MAX_SESSIONS"
+        },
+        {
+          "description": "Password for OAuth approval page. Required unless --no-auth is used.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "BLE_MCP_AUTH_TOKEN"
+        }
+      ]
+    },
+    {
+      "registryType": "pypi",
+      "identifier": "ble-mcp-server",
+      "version": "0.1.5",
+      "transport": {
+        "type": "sse",
+        "path": "/sse"
+      },
+      "args": ["--transport", "sse"],
+      "environmentVariables": [
+        {
+          "description": "Enable BLE characteristic writes (off by default for safety)",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_ALLOW_WRITES"
+        },
+        {
+          "description": "Comma-separated UUID allowlist for writable characteristics",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_WRITE_ALLOWLIST"
+        },
+        {
+          "description": "Plugin policy: 'all' or comma-separated plugin names. Unset = disabled.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_PLUGINS"
+        },
+        {
+          "description": "Tool name separator character (default '.'). Set to '_' for clients that reject dots (e.g. Cursor, Claude Desktop).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_TOOL_SEPARATOR"
+        },
+        {
+          "description": "Maximum concurrent MCP sessions (default 1).",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false,
+          "name": "BLE_MCP_MAX_SESSIONS"
+        },
+        {
+          "description": "Password for OAuth approval page. Required unless --no-auth is used.",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "BLE_MCP_AUTH_TOKEN"
         }
       ]
     }

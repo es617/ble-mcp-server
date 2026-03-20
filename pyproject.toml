@@ -19,6 +19,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+http = [
+    "uvicorn>=0.27",
+    "starlette>=0.36",
+]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
@@ -63,6 +67,7 @@ ignore = [
     "RUF002",  # en-dash in docstrings is intentional
     "RUF003",  # en-dash in comments is intentional
     "RUF006",  # fire-and-forget create_task is intentional in signal handlers
+    "S106",    # token_type="bearer" is not a hardcoded password
 ]
 
 [tool.ruff.lint.per-file-ignores]

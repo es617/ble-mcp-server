@@ -8,7 +8,7 @@
 ![BLE](https://img.shields.io/badge/Bluetooth-BLE-0096FF)
 
 A stateful Bluetooth Low Energy (BLE) Model Context Protocol (MCP) server for developer tooling and AI agents.
-Works out of the box with Claude Code, VS Code with Copilot, and any MCP-compatible runtime. Communicates over **stdio** (no HTTP, no open ports) and uses [bleak](https://github.com/hbldh/bleak) for cross-platform BLE on macOS, Windows, and Linux.
+Works out of the box with Claude Code, VS Code with Copilot, and any MCP-compatible runtime. Defaults to **stdio** (no HTTP, no open ports), with optional **SSE** and **Streamable HTTP** transports for remote access and multi-session use. Uses [bleak](https://github.com/hbldh/bleak) for cross-platform BLE on macOS, Windows, and Linux.
 
 > **Example:** Let Claude Code scan for nearby BLE devices, connect to one, read characteristics, and stream notifications from real hardware.
 
@@ -180,7 +180,12 @@ Add to your project's `.cursor/mcp.json` (or create it). Cursor does not support
 | `BLE_MCP_TRACE` | enabled | JSONL tracing of every tool call. Set to `0`, `false`, or `no` to disable. |
 | `BLE_MCP_TRACE_PAYLOADS` | disabled | Include `value_b64`/`value_hex` in traced args (stripped by default). |
 | `BLE_MCP_TRACE_MAX_BYTES` | `16384` | Max payload chars before truncation (only applies when `TRACE_PAYLOADS` is on). |
-| `BLE_MCP_TOOL_SEPARATOR` | `.` | Character used to separate tool name segments. Set to `_` for MCP clients that reject dots in tool names (e.g. Cursor). |
+| `BLE_MCP_TOOL_SEPARATOR` | `.` | Character used to separate tool name segments. Set to `_` for MCP clients that reject dots in tool names (e.g. Cursor, or Claude Desktop). |
+| `BLE_MCP_MAX_SESSIONS` | `1` | Maximum concurrent MCP sessions (only meaningful for SSE and Streamable HTTP transports). |
+| `BLE_MCP_MAX_CONNECTIONS` | `3` | Maximum active BLE connections per session. |
+| `BLE_MCP_MAX_SCANS` | `5` | Maximum active scans per session. |
+| `BLE_MCP_MAX_SUBSCRIPTIONS_PER_CONN` | `10` | Maximum notification subscriptions per connection. |
+| `BLE_MCP_AUTH_TOKEN` | unset | Password for OAuth approval page on HTTP transports. Required unless `--no-auth` is used. Ignored for stdio. |
 
 ---
 
@@ -313,9 +318,85 @@ Open the URL with the auth token from the terminal output. The Inspector gives y
 
 ---
 
+## Transports
+
+The server supports three MCP transports. **stdio is the default** and recommended for most use cases — zero configuration, no network exposure. HTTP transports are available for remote access and multi-client scenarios.
+
+| Transport | Command | Sessions | Use case |
+|---|---|---|---|
+| **stdio** (default) | `ble_mcp` | Single | CLI tools, IDE integrations |
+| **SSE** | `ble_mcp --transport sse` | Multiple | Older MCP clients, web-based tools |
+| **Streamable HTTP** | `ble_mcp --transport streamable-http` | Multiple | Newer MCP clients, production deployments |
+
+### HTTP transport options
+
+```bash
+# SSE on default port (OAuth enabled by default)
+ble_mcp --transport sse
+
+# Streamable HTTP on custom host/port
+ble_mcp --transport streamable-http --host 0.0.0.0 --port 9000
+
+# No auth (for local testing with MCP Inspector, etc.)
+ble_mcp --transport streamable-http --no-auth
+
+# Allow up to 3 concurrent sessions
+BLE_MCP_MAX_SESSIONS=3 ble_mcp --transport streamable-http
+```
+
+For SSE, clients connect via `GET /sse` and post messages to `/messages/`. For Streamable HTTP, the endpoint is `/mcp`.
+
+**Session isolation:** each MCP session gets its own BLE state — connections, scans, and subscriptions are not shared between sessions. Two sessions can independently scan or connect to the same device (if the BLE hardware and device allow it).
+
+### Authentication
+
+HTTP transports require `BLE_MCP_AUTH_TOKEN` to be set. This token serves as the password for the OAuth 2.0 approval page — when a client connects, it goes through the standard OAuth flow and the user must enter this password to approve access.
+
+```bash
+# Set a password and start the server
+BLE_MCP_AUTH_TOKEN=mysecret ble_mcp --transport streamable-http
+```
+
+The OAuth flow (handled automatically by Claude Desktop and other MCP clients):
+1. Client discovers the server's OAuth metadata at `/.well-known/oauth-authorization-server`
+2. Client registers itself via dynamic client registration (`/register`)
+3. User is redirected to an approval page where they enter the `BLE_MCP_AUTH_TOKEN` password
+4. Client exchanges the authorization code for access/refresh tokens
+
+All OAuth state (clients, tokens) is stored in memory and lost on restart — clients simply re-authenticate.
+
+**Claude Desktop setup (remote via tunnel):**
+
+```bash
+# Terminal 1: start the server
+BLE_MCP_AUTH_TOKEN=mysecret ble_mcp --transport streamable-http --host 0.0.0.0
+
+# Terminal 2: expose via cloudflared
+cloudflared tunnel --url http://localhost:8000
+```
+
+In Claude Desktop, add a remote MCP server with the tunnel URL + `/mcp` path (e.g. `https://abc123.trycloudflare.com/mcp`). Claude Desktop handles the OAuth flow — you just enter the password when prompted.
+
+**No auth (local testing only):**
+
+For local testing with MCP Inspector or similar tools, you can disable auth entirely:
+
+```bash
+ble_mcp --transport streamable-http --no-auth
+```
+
+Without `BLE_MCP_AUTH_TOKEN` or `--no-auth`, the server refuses to start on HTTP transports.
+
+stdio transport ignores all auth settings — it doesn't need auth because the client launches the server as a subprocess.
+
+**Note:** `uvicorn` and `starlette` are required for HTTP transports. They are already transitive dependencies of the `mcp` package, but you can install them explicitly with `pip install ble-mcp-server[http]`.
+
+---
+
 ## Architecture
 
-- **stdio MCP transport** — no HTTP, no network ports
+- **Multiple transports** — stdio (default), SSE, and Streamable HTTP
+- **Per-session isolation** — each MCP session gets its own BLE state
 - **Stateful** — connections and subscriptions persist in memory
 - **Safe by default** — writes gated by env flags + allowlist
 - **Agent-friendly** — structured outputs, buffered notifications
@@ -327,7 +408,7 @@ Open the URL with the auth token from the terminal output. The Inspector gives y
 
 - **Real hardware is asynchronous; agent runtimes mostly aren't.** Devices disconnect, notifications arrive out of band, and state changes while the agent is thinking. Most agent runtimes are optimized for clean request/response loops. The server bridges this with polling tools, buffered notification queues, and MCP log notifications for disconnects and incoming data — but MCP log notifications are client-dependent (they work in the MCP Inspector; Claude Code currently ignores them). The agent can always detect disconnects on the next tool call and poll for notifications explicitly — the log messages are a best-effort heads-up, not a guarantee.
 
-- **Single-client only.** The server handles one MCP session at a time (stdio transport). Multi-client transports (HTTP/SSE) may be added later.
+- **stdio is single-session.** The stdio transport handles one MCP session at a time. For multi-session use, switch to SSE or Streamable HTTP transport with `--transport sse` or `--transport streamable-http`.
 
 ---
 
