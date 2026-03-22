@@ -72,6 +72,8 @@ class Subscription:
     # Reset by drain/poll/wait so the next notification triggers a new alert.
     notified_client: bool = False
     created_ts: float = field(default_factory=time.time)
+    # Latest notification value for MCP resource reads (independent of queue).
+    latest_value: dict[str, Any] | None = field(default=None, repr=False)
 
 
 @dataclass
@@ -107,6 +109,39 @@ class ConnectionEntry:
     name: str | None = None
 
 
+@dataclass
+class Collector:
+    """A background data-collection task."""
+
+    collector_id: str
+    mode: str  # "read", "notify", "scan"
+    active: bool = True
+    buffer: list[dict[str, Any]] = field(default_factory=list)
+    max_items: int = 1000
+    created_ts: float = field(default_factory=time.time)
+    # For read mode
+    connection_id: str | None = None
+    char_uuid: str | None = None
+    interval_s: float = 10.0
+    # For notify mode
+    subscription_id: str | None = None
+    owns_subscription: bool = False  # True if collector created the subscription
+    # For scan mode
+    name_filter: str | None = None
+    service_uuid: str | None = None
+    scan_id: str | None = None
+    # Background task handle
+    _task: asyncio.Task[None] | None = field(default=None, repr=False)
+    # Optional async callback: (collector_id) -> None — fired on new data
+    on_data_cb: Any | None = field(default=None, repr=False)
+
+    def append(self, entry: dict[str, Any]) -> None:
+        """Append a reading to the buffer, enforcing max_items."""
+        self.buffer.append(entry)
+        if len(self.buffer) > self.max_items:
+            self.buffer = self.buffer[-self.max_items :]
+
+
 _STALE_TTL_S = 600.0  # 10 minutes
 _MAX_STALE_ENTRIES = 100
 
@@ -125,6 +160,7 @@ class BleState:
         # subscription_id -> Subscription (flat index for fast lookup)
         self.subscriptions: dict[str, Subscription] = {}
         self.scans: dict[str, ScanEntry] = {}
+        self.collectors: dict[str, Collector] = {}
         # Optional async callback fired on unexpected disconnect: (address, connection_id) -> None
         self.on_disconnect_cb: Any | None = None
         # Optional async callback fired on first buffered notification: (subscription_id, connection_id, char_uuid) -> None
@@ -144,6 +180,9 @@ class BleState:
         return _uuid.uuid4().hex[:12]
 
     def new_scan_id(self) -> str:
+        return _uuid.uuid4().hex[:12]
+
+    def new_collector_id(self) -> str:
         return _uuid.uuid4().hex[:12]
 
     def prune_stale(self) -> None:
@@ -420,6 +459,13 @@ class BleState:
             logger.debug("Shutdown timed out or errored, exiting anyway")
 
     async def _shutdown_inner(self) -> None:
+        # Stop active collectors
+        for col_id in list(self.collectors.keys()):
+            try:
+                await self.stop_collector(col_id)
+            except Exception:
+                pass
+        self.collectors.clear()
         # Stop active scans
         for sid in list(self.scans.keys()):
             try:
@@ -434,6 +480,37 @@ class BleState:
             except Exception:
                 pass
 
+    # -- collectors ----------------------------------------------------------
+
+    async def stop_collector(self, collector_id: str) -> Collector:
+        """Stop a collector and cancel its background task."""
+        col = self.collectors.get(collector_id)
+        if col is None:
+            raise KeyError(
+                f"Unknown collector_id: {collector_id}. Call ble_collector_list to see active collectors."
+            )
+        col.active = False
+        if col._task and not col._task.done():
+            col._task.cancel()
+            try:
+                await col._task
+            except (asyncio.CancelledError, Exception):
+                pass
+        # Clean up owned subscription
+        if col.owns_subscription and col.subscription_id and col.connection_id:
+            try:
+                await self.remove_subscription(col.connection_id, col.subscription_id)
+            except Exception:
+                pass
+        # Clean up owned scan
+        if col.scan_id:
+            try:
+                await self.stop_scan(col.scan_id)
+            except Exception:
+                pass
+        logger.info("Collector %s stopped (%d readings)", collector_id, len(col.buffer))
+        return col
+
     # -- subscriptions -------------------------------------------------------
 
     def _enqueue_notification(self, sub: Subscription, notification: dict[str, Any]) -> None:
@@ -441,6 +518,20 @@ class BleState:
 
         Called on the event loop thread via ``call_soon_threadsafe``.
         """
+        # Store latest value for MCP resource reads (independent of queue)
+        sub.latest_value = notification
+
+        # Feed active collectors in notify mode that watch this subscription
+        for collector in self.collectors.values():
+            if (
+                collector.active
+                and collector.mode == "notify"
+                and collector.subscription_id == sub.subscription_id
+            ):
+                collector.append(notification)
+                if collector.on_data_cb is not None:
+                    asyncio.get_running_loop().create_task(collector.on_data_cb(collector.collector_id))
+
         try:
             sub.queue.put_nowait(notification)
         except asyncio.QueueFull:

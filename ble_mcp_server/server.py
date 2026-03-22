@@ -19,11 +19,13 @@ from mcp.types import TextContent, Tool
 
 from ble_mcp_server import (
     handlers_ble,
+    handlers_collector,
     handlers_introspection,
     handlers_plugin,
     handlers_spec,
     handlers_trace,
 )
+from ble_mcp_server.handlers_resources import notify_resource_update, register_resource_handlers
 from ble_mcp_server.helpers import (
     ALLOW_WRITES,
     WRITE_ALLOWLIST,
@@ -89,12 +91,14 @@ def build_server(session_mgr: SessionStateManager) -> Server:
         + handlers_spec.TOOLS
         + handlers_trace.TOOLS
         + handlers_plugin.TOOLS
+        + handlers_collector.TOOLS
     )
     handlers: dict[str, Any] = {
         **handlers_ble.HANDLERS,
         **handlers_introspection.HANDLERS,
         **handlers_spec.HANDLERS,
         **handlers_trace.HANDLERS,
+        **handlers_collector.HANDLERS,
     }
 
     # --- Plugin system ---
@@ -130,7 +134,7 @@ def build_server(session_mgr: SessionStateManager) -> Server:
         # Wire notification callbacks for this session once.
         if session_key not in _wired_sessions:
             _wired_sessions.add(session_key)
-            _wire_session_callbacks(state, session)
+            _wire_session_callbacks(state, session, session_key)
 
         arguments = arguments or {}
 
@@ -165,6 +169,28 @@ def build_server(session_mgr: SessionStateManager) -> Server:
             if conn:
                 conn.last_seen_ts = time.time()
 
+        # Notify client that the resource list changed after subscribe/unsubscribe/disconnect
+        _RESOURCE_CHANGING_TOOLS = {
+            "ble_subscribe",
+            "ble_unsubscribe",
+            "ble_disconnect",
+            "ble_collector_start",
+            "ble_collector_stop",
+        }
+        # Also handle dot-separated names for BLE_MCP_TOOL_SEPARATOR="."
+        _RESOURCE_CHANGING_TOOLS_DOT = {
+            "ble.subscribe",
+            "ble.unsubscribe",
+            "ble.disconnect",
+            "ble.collector.start",
+            "ble.collector.stop",
+        }
+        if result.get("ok") and name in (_RESOURCE_CHANGING_TOOLS | _RESOURCE_CHANGING_TOOLS_DOT):
+            try:
+                await session.send_resource_list_changed()
+            except Exception:
+                pass
+
         if buf:
             duration_ms = round((time.monotonic() - t0) * 1000, 1)
             buf.emit(
@@ -182,6 +208,23 @@ def build_server(session_mgr: SessionStateManager) -> Server:
 
         return _result_text(result)
 
+    # --- MCP Resources (BLE notification streams) ---
+    register_resource_handlers(server, session_mgr)
+
+    # The SDK hardcodes subscribe=False in get_capabilities().  Override it
+    # so clients know resource subscriptions are supported.
+    _orig_get_capabilities = server.get_capabilities
+
+    def _patched_get_capabilities(
+        notification_options: NotificationOptions, experimental_capabilities: dict[str, Any]
+    ) -> Any:
+        caps = _orig_get_capabilities(notification_options, experimental_capabilities)
+        if caps.resources is not None:
+            caps.resources.subscribe = True
+        return caps
+
+    server.get_capabilities = _patched_get_capabilities  # type: ignore[assignment]
+
     init_trace()
     return server
 
@@ -191,7 +234,7 @@ def build_server(session_mgr: SessionStateManager) -> Server:
 # ---------------------------------------------------------------------------
 
 
-def _wire_session_callbacks(state: Any, session: Any) -> None:
+def _wire_session_callbacks(state: Any, session: Any, session_key: str) -> None:
     """Attach disconnect and GATT notification callbacks for *session*."""
     buf = get_trace_buffer()
 
@@ -244,6 +287,9 @@ def _wire_session_callbacks(state: Any, session: Any) -> None:
                     }
                 )
 
+        # Also notify via MCP resource subscription (if client subscribed)
+        await notify_resource_update(session, session_key, connection_id, char_uuid)
+
     state.on_disconnect_cb = _notify_disconnect
     state.on_notification_cb = _notify_gatt
 
@@ -269,7 +315,7 @@ async def _run_stdio(session_mgr: SessionStateManager) -> None:
     try:
         async with stdio_server() as (read_stream, write_stream):
             init_options = server.create_initialization_options(
-                notification_options=NotificationOptions(tools_changed=True),
+                notification_options=NotificationOptions(tools_changed=True, resources_changed=True),
             )
             await server.run(read_stream, write_stream, init_options)
     except _BENIGN_ASYNC:
@@ -442,7 +488,7 @@ async def _run_sse(
     async def handle_sse_endpoint(request: Any) -> Response:
         async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
             init_options = server.create_initialization_options(
-                notification_options=NotificationOptions(tools_changed=True),
+                notification_options=NotificationOptions(tools_changed=True, resources_changed=True),
             )
             await server.run(streams[0], streams[1], init_options)
         return Response()
