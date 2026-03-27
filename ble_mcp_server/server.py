@@ -244,8 +244,15 @@ def _wire_session_callbacks(state: Any, session: Any) -> None:
                     }
                 )
 
+    async def _send_log(level: str, message: str) -> None:
+        try:
+            await session.send_log_message(level=level, data=message, logger="ble_mcp_server")
+        except Exception:
+            pass
+
     state.on_disconnect_cb = _notify_disconnect
     state.on_notification_cb = _notify_gatt
+    state.on_log_cb = _send_log
 
 
 # ---------------------------------------------------------------------------
@@ -480,7 +487,6 @@ async def _run_streamable_http(
     """Run the server over Streamable HTTP transport (multi-session capable)."""
     from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
     from starlette.applications import Starlette
-    from starlette.routing import Route
 
     server = build_server(session_mgr)
     issuer_url = external_url or f"http://{host}:{port}"
@@ -501,22 +507,16 @@ async def _run_streamable_http(
 
     routes: list[Any] = []
 
+    from starlette.routing import Mount
+
     if no_auth:
-        # No auth — direct access
-        routes += [
-            Route("/mcp", endpoint=http_session_manager.handle_request, methods=["GET", "POST", "DELETE"])
-        ]
+        # No auth — Mount passes (scope, receive, send) correctly to ASGI app
+        routes += [Mount("/mcp", app=http_session_manager.handle_request)]
     else:
         # OAuth flow — public auth routes + protected MCP endpoint
         auth_routes, wrap_protected = _build_oauth_routes(issuer_url, "/mcp", AUTH_TOKEN)
         routes += auth_routes
-        routes += [
-            Route(
-                "/mcp",
-                endpoint=wrap_protected(http_session_manager.handle_request),
-                methods=["GET", "POST", "DELETE"],
-            ),
-        ]
+        routes += [Mount("/mcp", app=wrap_protected(http_session_manager.handle_request))]
 
     starlette_app = Starlette(routes=routes, lifespan=lifespan)
     app: Any = starlette_app

@@ -6,7 +6,7 @@ from typing import Any
 
 from mcp.types import Tool
 
-from ble_mcp_server.helpers import _ok
+from ble_mcp_server.helpers import _err, _ok
 from ble_mcp_server.state import BleState
 
 # ---------------------------------------------------------------------------
@@ -53,6 +53,32 @@ TOOLS: list[Tool] = [
             "type": "object",
             "properties": {},
             "required": [],
+        },
+    ),
+    Tool(
+        name="ble.tasks.list",
+        description=(
+            "List all registered background tasks (from plugins) with their status. "
+            "Shows task_id, name, running/stopped, start time, and any error."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    ),
+    Tool(
+        name="ble.tasks.cancel",
+        description="Cancel a running background task by task_id.",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "description": "The task ID to cancel (from ble.tasks.list).",
+                },
+            },
+            "required": ["task_id"],
         },
     ),
 ]
@@ -129,8 +155,23 @@ async def handle_scans_list(state: BleState, _args: dict[str, Any]) -> dict[str,
     return _ok(scans=items, count=len(items))
 
 
+async def handle_tasks_list(state: BleState, _args: dict[str, Any]) -> dict[str, Any]:
+    tasks = state.list_tasks()
+    return _ok(tasks=tasks, count=len(tasks))
+
+
+async def handle_tasks_cancel(state: BleState, args: dict[str, Any]) -> dict[str, Any]:
+    task_id = args.get("task_id")
+    if not task_id:
+        return _err("invalid_params", "task_id is required")
+    await state.cancel_task(task_id)
+    return _ok(task_id=task_id, cancelled=True)
+
+
 HANDLERS: dict[str, Any] = {
     "ble.connections.list": handle_connections_list,
     "ble.subscriptions.list": handle_subscriptions_list,
     "ble.scans.list": handle_scans_list,
+    "ble.tasks.list": handle_tasks_list,
+    "ble.tasks.cancel": handle_tasks_cancel,
 }

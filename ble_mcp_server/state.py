@@ -129,6 +129,10 @@ class BleState:
         self.on_disconnect_cb: Any | None = None
         # Optional async callback fired on first buffered notification: (subscription_id, connection_id, char_uuid) -> None
         self.on_notification_cb: Any | None = None
+        # Optional async callback for plugins to send arbitrary log messages: (level, message) -> None
+        self.on_log_cb: Any | None = None
+        # Background task registry — plugins register tasks here for tracking/cleanup
+        self.background_tasks: dict[str, dict[str, Any]] = {}  # task_id -> {name, task, started_ts}
         self._shutdown_done: bool = False
         # Resource limits
         self.max_connections = max_connections
@@ -142,6 +146,50 @@ class BleState:
 
     def new_subscription_id(self) -> str:
         return _uuid.uuid4().hex[:12]
+
+    # -- background tasks ----------------------------------------------------
+
+    def register_task(self, name: str, task: asyncio.Task[Any]) -> str:
+        """Register a background task for tracking. Returns a task_id."""
+        task_id = _uuid.uuid4().hex[:12]
+        self.background_tasks[task_id] = {
+            "name": name,
+            "task": task,
+            "started_ts": time.time(),
+        }
+        return task_id
+
+    def list_tasks(self) -> list[dict[str, Any]]:
+        """List all registered background tasks with status."""
+        result = []
+        for task_id, info in self.background_tasks.items():
+            task: asyncio.Task[Any] = info["task"]
+            result.append(
+                {
+                    "task_id": task_id,
+                    "name": info["name"],
+                    "running": not task.done(),
+                    "started_ts": info["started_ts"],
+                    "error": str(task.exception())
+                    if task.done() and not task.cancelled() and task.exception()
+                    else None,
+                }
+            )
+        return result
+
+    async def cancel_task(self, task_id: str) -> None:
+        """Cancel a background task by ID."""
+        info = self.background_tasks.get(task_id)
+        if info is None:
+            raise KeyError(f"Unknown task_id: {task_id}")
+        task: asyncio.Task[Any] = info["task"]
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
+        logger.info("Cancelled background task %s (%s)", task_id, info["name"])
 
     def new_scan_id(self) -> str:
         return _uuid.uuid4().hex[:12]
@@ -374,6 +422,18 @@ class BleState:
             await asyncio.sleep(timeout_s)
             try:
                 await self.stop_scan(sid)
+                # Notify on scan completion (timeout only, not manual stop)
+                device_count = len(entry.devices)
+                if self.on_log_cb is not None:
+                    names = [d.get("name", "") for d in entry.devices.values() if d.get("name")]
+                    summary = ", ".join(names[:5])
+                    if len(names) > 5:
+                        summary += f", ... (+{len(names) - 5} more)"
+                    await self.on_log_cb(
+                        "info",
+                        f"Scan {sid} completed: {device_count} devices found"
+                        + (f" — {summary}" if summary else ""),
+                    )
             except Exception:
                 logger.debug("auto-stop failed for scan %s", sid, exc_info=True)
 
@@ -420,6 +480,13 @@ class BleState:
             logger.debug("Shutdown timed out or errored, exiting anyway")
 
     async def _shutdown_inner(self) -> None:
+        # Cancel background tasks
+        for task_id in list(self.background_tasks.keys()):
+            try:
+                await self.cancel_task(task_id)
+            except Exception:
+                pass
+        self.background_tasks.clear()
         # Stop active scans
         for sid in list(self.scans.keys()):
             try:

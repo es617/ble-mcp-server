@@ -272,6 +272,40 @@ Returns:
 
 The `filters` field is `null` when no filters were applied.
 
+### ble.tasks.list
+
+List all registered background tasks (from plugins) with their status.
+
+```json
+{}
+```
+
+Returns:
+
+```json
+{
+  "ok": true,
+  "tasks": [{
+    "task_id": "d4e5f6",
+    "name": "scanner_monitor",
+    "running": true,
+    "started_ts": 1700000000.0,
+    "error": null
+  }],
+  "count": 1
+}
+```
+
+### ble.tasks.cancel
+
+Cancel a running background task by task_id.
+
+```json
+{ "task_id": "d4e5f6" }
+```
+
+Returns `{ "ok": true, "task_id": "d4e5f6", "cancelled": true }`.
+
 ---
 
 ## Protocol Specs

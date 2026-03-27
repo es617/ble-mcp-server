@@ -16,14 +16,16 @@ python -m pytest tests/ -v
 
 ```
 ble_mcp_server/
-  server.py             # MCP server setup, tool dispatch, entry point
-  state.py              # BLE connection/subscription state (BleState)
+  server.py             # MCP server setup, tool dispatch, transports, auth, entry point
+  state.py              # BLE connection/subscription state (BleState), background task registry
+  session_state.py      # Per-session BleState management for multi-transport support
+  oauth_provider.py     # In-memory OAuth 2.0 provider for HTTP transports
   helpers.py            # Response builders (_ok, _err), config (ALLOW_WRITES)
   specs.py              # Protocol spec management (filesystem, no BLE)
   plugins.py            # Plugin loader and manager (no BLE)
   trace.py              # JSONL tracing ring buffer
   handlers_ble.py       # BLE tools (scan, connect, read, write, subscribe)
-  handlers_introspection.py  # Introspection tools (list connections, subscriptions, scans)
+  handlers_introspection.py  # Introspection tools (list connections, subscriptions, scans, tasks)
   handlers_spec.py      # Spec tools (template, register, list, attach, search)
   handlers_trace.py     # Trace tools (status, tail)
   handlers_plugin.py    # Plugin tools (template, list, load, reload)
@@ -54,8 +56,10 @@ HANDLERS: dict[str, Callable] = {  # Maps tool name → async handler function
 In `server.py`, these are merged inside `build_server()`:
 
 ```python
-tools = handlers_ble.TOOLS + handlers_introspection.TOOLS + handlers_spec.TOOLS + handlers_trace.TOOLS + handlers_plugin.TOOLS
-handlers = {**handlers_ble.HANDLERS, **handlers_introspection.HANDLERS, **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
+tools = (handlers_ble.TOOLS + handlers_introspection.TOOLS + handlers_spec.TOOLS
+         + handlers_trace.TOOLS + handlers_plugin.TOOLS)
+handlers = {**handlers_ble.HANDLERS, **handlers_introspection.HANDLERS,
+            **handlers_spec.HANDLERS, **handlers_trace.HANDLERS}
 ```
 
 Plugin handlers are added in `build_server()` via `handlers_plugin.make_handlers()`, which returns closures that capture the `PluginManager` and `Server` instances.
@@ -81,7 +85,7 @@ The dispatcher in `server.py` catches common exceptions (KeyError, ConnectionErr
 3. Add the mapping to the `HANDLERS` dict
 4. Add tests in the corresponding `test_*.py`
 
-Tool names follow the convention `ble.<category>.<action>` (e.g., `ble.spec.read`, `ble.plugin.reload`).
+Tool names follow the convention `ble.<category>.<action>` (e.g., `ble.spec.read`, `ble.plugin.reload`). The default tool separator is `_` (e.g., `ble_spec_read`), configurable via `BLE_MCP_TOOL_SEPARATOR`.
 
 ## Plugin system internals
 
@@ -94,6 +98,10 @@ Tool names follow the convention `ble.<category>.<action>` (e.g., `ble.spec.read
 **Policy:** `BLE_MCP_PLUGINS` env var is parsed into `(enabled, allowlist)`. The `PluginManager` checks this before every `load()` call. `load_all()` skips entirely when disabled.
 
 **Hot reload:** `reload(name)` calls `unload(name)` then `load(path)`. Unload filters the TOOLS list in-place and pops handler keys. The old module is deleted from `sys.modules`.
+
+**Background tasks:** Plugins can start `asyncio` tasks registered with `state.register_task(name, task)`. These are tracked and cancellable via `ble.tasks.list` / `ble.tasks.cancel`. All tasks are cancelled on shutdown.
+
+**Notifications:** Plugins can send MCP log messages via `state.on_log_cb(level, message)`. The scan detection callback also sends log notifications when new devices are found.
 
 **Limitation:** MCP clients may not refresh their tool list mid-session. Newly loaded plugins may require a client restart to call their tools. Hot-reload of existing plugins works without restart.
 

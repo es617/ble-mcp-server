@@ -11,13 +11,13 @@ The server gives an AI agent (like Claude) a set of BLE tools over the MCP proto
 Everything is **stateful**: connections and subscriptions persist across tool calls. The agent doesn't have to re-connect between each operation.
 
 ```
-┌─────────────┐       stdio/MCP        ┌─────────────────┐       BLE        ┌──────────┐
+┌─────────────┐    stdio/SSE/HTTP      ┌─────────────────┐       BLE        ┌──────────┐
 │  AI Agent   │ ◄────────────────────► │  BLE MCP Server │ ◄──────────────► │  Device  │
 │ (Claude etc)│   structured JSON      │  (this project) │   bleak/GATT     │          │
 └─────────────┘                        └─────────────────┘                  └──────────┘
 ```
 
-The agent sees tools like `ble.connect`, `ble.read`, `ble.subscribe`. It calls them, gets structured JSON back, and reasons about what to do next.
+The server supports stdio (default), SSE, and Streamable HTTP transports. Each session gets isolated BLE state. The agent sees tools like `ble_connect`, `ble_read`, `ble_subscribe`. It calls them, gets structured JSON back, and reasons about what to do next.
 
 ---
 
@@ -144,6 +144,26 @@ The agent reasons: "This device has service `1d14d6ee...`, and the `ota_dfu` plu
 The agent can also **create** plugins. Using `ble.plugin.template`, it generates a skeleton, fills in the implementation based on the device spec, and saves it to `.ble_mcp/plugins/`. After a server restart (or hot-reload), the new tools are available. Review generated plugins before enabling them in sensitive environments.
 
 This is the core loop: the agent explores a device, writes a plugin for it, and future sessions get shortcut tools.
+
+### Background tasks
+
+Plugins can start background `asyncio` tasks for continuous operations — periodic scans, data collection loops, monitoring. The plugin template includes examples.
+
+Tasks are registered with `state.register_task(name, task)` and visible via `ble.tasks.list`. The agent (or user) can cancel any task with `ble.tasks.cancel`. All tasks are automatically cancelled on server shutdown.
+
+### Plugin notifications
+
+Plugins can send MCP log notifications to the client via `state.on_log_cb(level, message)`:
+
+```python
+if state.on_log_cb:
+    import asyncio
+    asyncio.get_running_loop().create_task(
+        state.on_log_cb("info", "Temperature threshold exceeded: 31.5C")
+    )
+```
+
+This allows background tasks to proactively alert the client about events. Whether the client acts on these depends on the MCP client implementation — MCP Inspector shows them in real time; Claude Code and Claude Desktop currently ignore them; custom MCP clients (like an edge agent) can receive and act on them.
 
 ### Beyond the agent
 

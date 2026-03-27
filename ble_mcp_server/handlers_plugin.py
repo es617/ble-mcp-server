@@ -23,6 +23,7 @@ def _plugin_template(device_name: str | None = None) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
     return f'''"""Plugin for {name}."""
 
+import asyncio
 from mcp.types import Tool
 
 from ble_mcp_server.helpers import _ok, _err  # _ok(key=val) / _err("code", "message")
@@ -68,6 +69,54 @@ async def handle_example(state: BleState, args: dict) -> dict:
 HANDLERS = {{
     "{slug}.example": handle_example,
 }}
+
+# ---------------------------------------------------------------------------
+# Background tasks (optional)
+# ---------------------------------------------------------------------------
+# Plugins can run background asyncio tasks for continuous monitoring.
+# Use a module-level variable to track the task so start/stop tools can control it.
+#
+# _task_id = None
+#
+# async def _monitor_loop(state: BleState):
+#     """Example: continuous scan or read loop."""
+#     while True:
+#         try:
+#             # Do BLE work here (scan, read, subscribe, etc.)
+#             pass
+#         except Exception:
+#             pass
+#         await asyncio.sleep(10)
+#
+# async def handle_start_monitor(state: BleState, args: dict) -> dict:
+#     global _task_id
+#     if _task_id and _task_id in state.background_tasks:
+#         info = state.background_tasks[_task_id]
+#         if not info["task"].done():
+#             return _err("already_running", "Monitor is already running")
+#     task = asyncio.create_task(_monitor_loop(state))
+#     _task_id = state.register_task("{slug}_monitor", task)
+#     return _ok(message="Monitor started", task_id=_task_id)
+#
+# async def handle_stop_monitor(state: BleState, args: dict) -> dict:
+#     global _task_id
+#     if _task_id:
+#         await state.cancel_task(_task_id)
+#         _task_id = None
+#     return _ok(message="Monitor stopped")
+
+# ---------------------------------------------------------------------------
+# Sending notifications (optional)
+# ---------------------------------------------------------------------------
+# Plugins can send MCP log notifications to the client (e.g., an edge agent):
+#
+# if state.on_log_cb:
+#     asyncio.get_running_loop().create_task(
+#         state.on_log_cb("info", "Device appeared: SensorTag")
+#     )
+#
+# Levels: "debug", "info", "warning", "error"
+# Use this to alert about events — device arrival, threshold crossed, etc.
 '''
 
 

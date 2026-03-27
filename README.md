@@ -195,7 +195,7 @@ See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.m
 | Category | Tools |
 |---|---|
 | **BLE Core** | `ble_scan_start`, `ble_scan_get_results`, `ble_scan_stop`, `ble_connect`, `ble_disconnect`, `ble_connection_status`, `ble_discover`, `ble_mtu`, `ble_read`, `ble_write`, `ble_read_descriptor`, `ble_write_descriptor`, `ble_subscribe`, `ble_unsubscribe`, `ble_wait_notification`, `ble_poll_notifications`, `ble_drain_notifications` |
-| **Introspection** | `ble_connections_list`, `ble_subscriptions_list`, `ble_scans_list` |
+| **Introspection** | `ble_connections_list`, `ble_subscriptions_list`, `ble_scans_list`, `ble_tasks_list`, `ble_tasks_cancel` |
 | **Protocol Specs** | `ble_spec_template`, `ble_spec_register`, `ble_spec_list`, `ble_spec_attach`, `ble_spec_get`, `ble_spec_read`, `ble_spec_search` |
 | **Tracing** | `ble_trace_status`, `ble_trace_tail` |
 | **Plugins** | `ble_plugin_template`, `ble_plugin_list`, `ble_plugin_reload`, `ble_plugin_load` |
@@ -234,7 +234,20 @@ claude mcp add ble -e BLE_MCP_PLUGINS=all -- ble_mcp
 claude mcp add ble -e BLE_MCP_PLUGINS=sensortag,ota -- ble_mcp
 ```
 
-Editing an already-loaded plugin only requires `ble.plugin.reload` — no restart needed.
+Editing an already-loaded plugin only requires `ble_plugin_reload` — no restart needed.
+
+### Background tasks
+
+Plugins can start background `asyncio` tasks for continuous monitoring — periodic scans, data collection loops, etc. The plugin template includes commented examples for this pattern.
+
+Background tasks are registered with the server via `state.register_task(name, task)`, making them visible to the agent:
+
+- `ble_tasks_list` — shows all running background tasks with status
+- `ble_tasks_cancel` — stops a task by ID (safety net for runaway tasks)
+
+### Plugin notifications
+
+Plugins can send MCP log notifications to the client via `state.on_log_cb(level, message)`. This allows plugins to proactively alert the agent about events — device arrival, threshold crossed, anomaly detected — without waiting for a tool call.
 
 See [Concepts](https://github.com/es617/ble-mcp-server/blob/main/docs/concepts.md) for the plugin contract, metadata matching, and how specs and plugins work together.
 
@@ -405,7 +418,7 @@ stdio transport ignores all auth settings — it doesn't need auth because the c
 
 ## Known limitations
 
-- **Real hardware is asynchronous; agent runtimes mostly aren't.** Devices disconnect, notifications arrive out of band, and state changes while the agent is thinking. Most agent runtimes are optimized for clean request/response loops. The server bridges this with polling tools, buffered notification queues, and MCP log notifications for disconnects and incoming data — but MCP log notifications are client-dependent (they work in the MCP Inspector; Claude Code currently ignores them). The agent can always detect disconnects on the next tool call and poll for notifications explicitly — the log messages are a best-effort heads-up, not a guarantee.
+- **Real hardware is asynchronous; agent runtimes mostly aren't.** Devices disconnect, notifications arrive out of band, and state changes while the agent is thinking. Most agent runtimes are optimized for clean request/response loops. The server bridges this with polling tools, buffered notification queues, and MCP log notifications for disconnects, incoming data, and scan results — but MCP log notifications are client-dependent (they work in MCP Inspector; Claude Code and Claude Desktop currently ignore them). The agent can always detect disconnects on the next tool call and poll for notifications explicitly — the log messages are a best-effort heads-up, not a guarantee. Custom MCP clients (e.g., an edge agent using the MCP SDK directly) can receive and act on these notifications.
 
 - **stdio is single-session.** The stdio transport handles one MCP session at a time. For multi-session use, switch to SSE or Streamable HTTP transport with `--transport sse` or `--transport streamable-http`.
 
