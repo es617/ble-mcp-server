@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+### Fixed
+- Fix Streamable HTTP transport routing — use `Mount` instead of `Route` for `/mcp` endpoint (Route passed wrong args to ASGI handler)
+
+### Added
+- Background task registry (`register_task`, `list_tasks`, `cancel_task` on BleState)
+- `ble_tasks_list` and `ble_tasks_cancel` introspection tools
+- `on_log_cb` callback for plugin notifications to MCP client
+- Scan completion notification (fires once when scan auto-stops)
+- Updated plugin template with background task and notification examples
+
 ## 0.2.0
 
 ### Added

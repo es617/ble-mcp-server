@@ -6,12 +6,12 @@
     "url": "https://github.com/es617/ble-mcp-server.git",
     "source": "github"
   },
-  "version": "0.2.0",
+  "version": "0.3.0",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "ble-mcp-server",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": {
         "type": "stdio"
       },
@@ -49,7 +49,7 @@
     {
       "registryType": "pypi",
       "identifier": "ble-mcp-server",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": {
         "type": "streamable-http",
         "url": "http://localhost:8000/mcp"
@@ -103,7 +103,7 @@
     {
       "registryType": "pypi",
       "identifier": "ble-mcp-server",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "transport": {
         "type": "sse",
         "url": "http://localhost:8000/sse"
